@@ -19,19 +19,6 @@ const MAX_TURN = 90 * Math.PI / 180      // furthest a shape can be left or righ
 
 let startTime // when the first round began, for the score
 
-// ---- Pages: name -> start ----------------------------------------------------
-// Show one of the pre-game pages and hide the rest. showPage(null) hides them all.
-function showPage(id) {
-  for (const page of document.querySelectorAll('.page')) page.style.display = page.id === id ? 'flex' : 'none'
-}
-
-// Page 1: username. Pressing Next (or Enter) goes to page 2.
-const usernameInput = document.getElementById('username')
-document.getElementById('name').onsubmit = (e) => {
-  e.preventDefault() // stop the form reloading the page
-  if (usernameInput.value.trim()) showPage('start')
-}
-
 // ---- Shapes ----------------------------------------------------------------
 // Hand-drawn outlines with clearly different silhouettes. None has rotational
 // symmetry (mirror symmetry is fine), so only one rotation matches the target.
@@ -190,11 +177,10 @@ function loop(now) {
 function finish() {
   const seconds = (performance.now() - startTime) / 1000
   document.getElementById('done').style.display = 'flex'
-  document.getElementById('scores').textContent = `${usernameInput.value.trim()}: ${seconds.toFixed(2)}s`
+  document.getElementById('scores').textContent = `${seconds.toFixed(2)}s`
 }
 
 // ---- Start ---------------------------------------------------------------------
-// Page 2: Start.
 // iOS only sends motion data after the user grants permission from a tap, so ask
 // for that first, while we're still directly inside the tap handler.
 document.querySelector('#start button').onclick = async () => {
@@ -212,7 +198,7 @@ document.querySelector('#start button').onclick = async () => {
     console.warn('No camera background:', err)
   }
 
-  showPage(null)
+  document.getElementById('start').style.display = 'none'
   // Lock in "forward" as the way the phone faces now (ignoring up/down tilt).
   const facing = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
   forwardYaw = Math.atan2(-facing.x, -facing.z)

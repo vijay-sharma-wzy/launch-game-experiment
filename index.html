@@ -16,10 +16,9 @@
       display: flex; align-items: center; justify-content: center;
       color: #fff;
     }
-    /* The two pages before the game: name -> start. main.js shows one at a time. */
-    .page { background: #111; flex-direction: column; gap: 24px; display: none; }
-    #name { display: flex; } /* the first page */
-    .page button, .page input { font-size: 24px; padding: 16px 32px; }
+    /* The Start page, shown before the game; main.js hides it when the game begins */
+    #start { background: #111; }
+    #start button { font-size: 24px; padding: 16px 32px; }
     #hud { pointer-events: none; }
     #round { position: fixed; top: 16px; width: 100%; text-align: center; color: #fff; text-shadow: 0 0 4px #000; pointer-events: none; }
     #done { background: #000; flex-direction: column; gap: 24px; display: none; }
@@ -30,14 +29,8 @@
 <body>
   <video id="video" playsinline muted autoplay></video>
 
-  <!-- Page 1: username. Not saved anywhere on the device, so it's typed in every game. -->
-  <form id="name" class="overlay page">
-    <input id="username" placeholder="Username" maxlength="20" autocomplete="off" required>
-    <button>Next</button>
-  </form>
-
-  <!-- Page 2: Start. Needs a tap so iOS will ask for motion permission. -->
-  <div id="start" class="overlay page">
+  <!-- Start page. Needs a tap so iOS will ask for motion permission. -->
+  <div id="start" class="overlay">
     <button>Start</button>
   </div>
 
