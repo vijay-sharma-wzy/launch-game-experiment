@@ -3,6 +3,7 @@
 ## Working on this repo
 
 - **This file is live.** Whenever the purpose, scope, game design, layout, commands or deployment change, update this file in the same piece of work. If something here no longer matches the repo, fix it rather than working around it.
+- **Test and build after every change.** Whenever you change the code, run `npm run build` to rebuild `dist/` without being asked, and fix any errors before reporting back. There is no automated test suite, so the test is a successful build plus a check that `npm run preview` serves the page. Say in your reply that the build passed, or show what failed. Motion and camera can't be tested off a phone, so say so when a change depends on them.
 - **Keep the repo lean and clean.** As you work, keep checking for dead code, unused files, unused dependencies, leftover debug logging, stale comments and duplicated logic, and remove them. Don't add files, dependencies or abstractions unless they're needed.
 
 ## Purpose
@@ -55,6 +56,8 @@ Current state: no server simulation exists yet. The score is just the local time
 - `vite.config.js` sets `base: "./"` so the build works from any host or sub-path.
 
 ## Commands
+
+Requires Node.js (installed with Homebrew: `brew install node`). Run `npm install` once to fetch dependencies.
 
 - `npm run dev` starts the dev server.
 - `npm run build` builds into `dist/`.
