@@ -5,7 +5,11 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 
 // ---- Tunables ----------------------------------------------------------------
 const ROUNDS = 5              // rounds per game
-const SHAPE_COUNT = 5         // shapes placed around the player each round (max: number of SHAPES below)
+const SHAPE_COUNT = 5         // shapes placed around the player each round: the target, its lookalikes, then unrelated shapes
+const VERTICES = 7            // corners per shape; the same for every shape, so no round is simpler than another
+const MIN_RADIUS = 0.35       // how far in a corner can sit (1 = the outer edge), so shapes don't turn into thin slivers
+const LOOKALIKES = 3          // decoys copied from the target: one mirror image, the rest with one corner moved
+const TWEAK = 0.4             // how far a lookalike's corner moves: enough to spot when you look closely, not at a glance
 const DISTANCE = 5            // how far the shapes sit from the player (world units)
 const SIZE = 1                // half the width/height of every shape's bounding box (world units)
 const LINE_WIDTH = 5          // outline thickness in pixels; thin lines get lost against the camera feed
@@ -21,22 +25,38 @@ const MAX_TURN = 90 * Math.PI / 180      // furthest a shape can be left or righ
 let startTime // when the first round began, for the score
 
 // ---- Shapes ----------------------------------------------------------------
-// Hand-drawn outlines with clearly different silhouettes. None has rotational
-// symmetry (mirror symmetry is fine), so only one rotation matches the target.
-const SHAPES = {
-  triangle:  [[0, 1], [-0.6, -0.8], [0.6, -0.8]],
-  house:     [[0, 1], [0.8, 0.3], [0.8, -0.9], [-0.8, -0.9], [-0.8, 0.3]],
-  arrow:     [[0, 1], [0.8, 0.1], [0.3, 0.1], [0.3, -1], [-0.3, -1], [-0.3, 0.1], [-0.8, 0.1]],
-  L:         [[-0.7, 1], [-0.1, 1], [-0.1, -0.3], [0.7, -0.3], [0.7, -1], [-0.7, -1]],
-  trapezoid: [[-0.4, 0.7], [0.4, 0.7], [1, -0.7], [-1, -0.7]],
-  chevron:   [[-1, 0.6], [0, -0.2], [1, 0.6], [1, 0], [0, -0.8], [-1, 0]],
-  T:         [[-0.9, 1], [0.9, 1], [0.9, 0.5], [0.25, 0.5], [0.25, -1], [-0.25, -1], [-0.25, 0.5], [-0.9, 0.5]],
-  flag:      [[-0.6, 1], [0.7, 0.5], [-0.4, 0], [-0.4, -1], [-0.6, -1]],
+// Every round makes a fresh irregular target plus decoys that look almost the same, so
+// the player has to study a shape before committing to it, and a bot can't learn a fixed set.
+// A shape is a list of corners, each at an angle and distance from the centre.
+
+// Each corner gets a random angle inside its own slice of the circle, so the corners stay
+// in order and the outline never crosses itself. Random shapes are practically never
+// rotationally symmetric, so only one rotation matches the target.
+function randomShape() {
+  const slice = 2 * Math.PI / VERTICES
+  return Array.from({ length: VERTICES }, (_, i) => ({
+    angle: (i + 0.2 + Math.random() * 0.6) * slice,
+    radius: MIN_RADIUS + Math.random() * (1 - MIN_RADIUS),
+  }))
+}
+
+// The hardest decoy: the same shape flipped left to right.
+function mirrored(shape) {
+  return shape.map(({ angle, radius }) => ({ angle: Math.PI - angle, radius }))
+}
+
+// The same shape with one corner pushed out (or pulled in, if it's already near the edge) by TWEAK.
+function tweaked(shape, corner) {
+  return shape.map((p, i) => {
+    if (i !== corner) return p
+    return { ...p, radius: p.radius + TWEAK <= 1 ? p.radius + TWEAK : p.radius - TWEAK }
+  })
 }
 
 // Centre a shape on its bounding box and scale it so its longer side is 2 * SIZE,
 // so every shape looks about the same size. Returns a closed x,y,z list for LineGeometry.
-function shapePositions(points) {
+function shapePositions(shape) {
+  const points = shape.map(({ angle, radius }) => [radius * Math.cos(angle), radius * Math.sin(angle)])
   const xs = points.map((p) => p[0])
   const ys = points.map((p) => p[1])
   const cx = (Math.min(...xs) + Math.max(...xs)) / 2
@@ -98,14 +118,22 @@ function startRound() {
   for (const shape of shapes) scene.remove(shape)
   if (targetOutline) camera.remove(targetOutline)
 
-  // Pick SHAPE_COUNT different shapes and scatter them over the play area, facing inward,
-  // with a random roll so the player has to match the rotation too.
-  const names = Object.keys(SHAPES).sort(() => Math.random() - 0.5).slice(0, SHAPE_COUNT)
+  // The target, then its lookalikes (one mirror image, the rest each with a different corner
+  // moved), then unrelated shapes to fill up to SHAPE_COUNT. Every round has the same mix,
+  // so no player gets an easier set of decoys than another.
+  const targetShape = randomShape()
+  const corners = [...Array(VERTICES).keys()].sort(() => Math.random() - 0.5)
+  const outlines = [targetShape, mirrored(targetShape)]
+  for (let i = 1; i < LOOKALIKES; i++) outlines.push(tweaked(targetShape, corners[i]))
+  while (outlines.length < SHAPE_COUNT) outlines.push(randomShape())
+
+  // Scatter them over the play area, facing inward, with a random roll so the player
+  // has to match the rotation too.
   shapes = []
   while (shapes.length < SHAPE_COUNT) {
     const direction = randomPlayDirection()
     if (shapes.some((s) => s.position.angleTo(direction) < MIN_SEPARATION)) continue // too close to another, re-roll
-    const geometry = new LineGeometry().setPositions(shapePositions(SHAPES[names[shapes.length]]))
+    const geometry = new LineGeometry().setPositions(shapePositions(outlines[shapes.length]))
     const shape = makeOutline(geometry, 0x00ffff, 0)
     shape.position.copy(direction.multiplyScalar(DISTANCE))
     shape.lookAt(0, 0, 0)
@@ -114,8 +142,8 @@ function startRound() {
     shapes.push(shape)
   }
 
-  // Pick the target and pin a copy of its outline to the camera so it stays centred on screen.
-  target = shapes[Math.floor(Math.random() * SHAPE_COUNT)]
+  // Pin a copy of the target's outline to the camera so it stays centred on screen.
+  target = shapes[0]
   targetOutline = makeOutline(target.geometry, 0xffffff, 2) // drawn over the cyan shapes
   targetOutline.position.z = -DISTANCE // same distance as the real shapes => same on-screen size
   camera.add(targetOutline)
@@ -145,7 +173,7 @@ function isOverlapping() {
   const onScreen = target.position.clone().project(camera)
   if (onScreen.z > 1 || onScreen.x ** 2 + onScreen.y ** 2 > POS_TOLERANCE ** 2) return false
 
-  // Tilt: angle between the shape's "up" and the screen's "up". The shapes have
+  // Tilt: angle between the shape's "up" and the screen's "up". Random shapes have
   // no rotational symmetry, so only one rotation matches.
   const shapeUp = new THREE.Vector3(0, 1, 0).applyQuaternion(target.quaternion)
   shapeUp.applyQuaternion(camera.quaternion.clone().invert()) // now in camera space
