@@ -10,9 +10,10 @@ const DISTANCE = 5            // how far the shapes sit from the player (world u
 const SIZE = 1                // half the width/height of every shape's bounding box (world units)
 const LINE_WIDTH = 5          // outline thickness in pixels; thin lines get lost against the camera feed
 const HALO_WIDTH = 3          // black border each side of an outline, so it stands out on light and dark backgrounds
-const FILL_SECONDS = 5        // time to fill the progress ring
-const POS_TOLERANCE = 0.06    // how close the shape must be to screen centre (screen runs -1..1)
-const TILT_TOLERANCE = 10 * Math.PI / 180 // how well rotation must match (radians)
+const FILL_SECONDS = 3        // time to fill the progress ring. Short, because holding still is the same for everyone and squashes the spread of scores
+const DRAIN_SPEED = 2         // the ring empties this many times faster than it fills, so wobbling costs time and steady hands rank higher
+const POS_TOLERANCE = 0.04    // how close the shape must be to screen centre (screen runs -1..1); tight, so precision separates players
+const TILT_TOLERANCE = 7 * Math.PI / 180 // how well rotation must match (radians)
 const MIN_SEPARATION = 50 * Math.PI / 180 // smallest angle between two shapes, so they never overlap on screen
 const FLOOR_CUTOUT = 90 * Math.PI / 180  // width of the cone cut out straight below the player, so no shapes at their feet
 const MAX_TURN = 90 * Math.PI / 180      // furthest a shape can be left or right of "forward"; nothing further behind
@@ -160,7 +161,7 @@ function loop(now) {
   const dt = (now - lastTime) / 1000
   lastTime = now
 
-  progress += (isOverlapping() ? dt : -dt) / FILL_SECONDS
+  progress += (isOverlapping() ? dt : -dt * DRAIN_SPEED) / FILL_SECONDS
   progress = Math.min(1, Math.max(0, progress))
   ringEl.style.strokeDashoffset = RING_LENGTH * (1 - progress)
 
