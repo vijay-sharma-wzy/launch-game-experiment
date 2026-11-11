@@ -2,51 +2,87 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>LAUNCH. Game Demo</title>
   <style>
-    html, body { margin: 0; height: 100%; overflow: hidden; background: #111; font-family: sans-serif; }
-    /* Camera feed fills the screen; the transparent 3D canvas sits on top of it */
-    video, canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-    video { object-fit: cover; filter: brightness(0.65); } /* dimmed so the bright outlines pop */
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #02040a; color: #fff; font-family: system-ui, sans-serif; }
+    /* The 3D space scene fills the screen. touch-action: none so dragging pans the sky instead of scrolling the page */
+    canvas { position: fixed; inset: 0; display: block; touch-action: none; cursor: grab; }
+    button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 
     /* Full-screen overlays, stacked on top of the 3D canvas */
     .overlay {
-      position: fixed; inset: 0;
-      display: flex; align-items: center; justify-content: center;
-      color: #fff;
+      position: fixed; inset: 0; box-sizing: border-box; padding: 24px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+      text-align: center; user-select: none; -webkit-user-select: none;
     }
-    /* The Start page, shown before the game; main.js hides it when the game begins */
-    #start { background: #111; }
-    #start button { font-size: 24px; padding: 16px 32px; }
-    #hud { pointer-events: none; }
-    #round { position: fixed; top: 16px; width: 100%; text-align: center; color: #fff; text-shadow: 0 0 4px #000; pointer-events: none; }
-    #done { background: #000; flex-direction: column; gap: 24px; display: none; }
-    #done h1 { margin: 0; font-size: 64px; letter-spacing: 8px; }
-    #scores { font-size: 22px; line-height: 1.6; text-align: center; }
+    .overlay h1 { margin: 0; font-size: 56px; letter-spacing: 10px; }
+    .overlay p { margin: 0; max-width: 320px; line-height: 1.5; }
+    .primary { padding: 14px 40px; font-size: 20px; font-weight: 600; color: #02040a; background: #ffd166; border: 0; border-radius: 999px; }
+
+    /* Start and DONE let the space scene show through; main.js shows and hides each overlay */
+    #start { background: rgba(2, 4, 10, 0.6); }
+    #done { background: rgba(2, 4, 10, 0.8); display: none; }
+    #score { font-size: 40px; font-variant-numeric: tabular-nums; }
+
+    /* HUD: round and running time, so the player always knows where they are */
+    #hud {
+      position: fixed; top: 0; left: 0; right: 0; padding: 16px 20px; padding-top: max(16px, env(safe-area-inset-top));
+      display: flex; justify-content: space-between; pointer-events: none;
+      font-size: 18px; font-variant-numeric: tabular-nums; text-shadow: 0 0 6px #000;
+    }
+
+    /* The prompt stays on screen for the whole round */
+    #prompt {
+      position: fixed; top: 56px; left: 0; right: 0; padding: 0 20px; margin-top: env(safe-area-inset-top);
+      text-align: center; font-size: 20px; font-weight: 600; text-shadow: 0 0 6px #000; pointer-events: none;
+    }
+
+    /* The ring at screen centre: hold it on a constellation and it fills; a wrong one flashes it red */
+    #ring { position: fixed; top: 50%; left: 50%; width: 110px; height: 110px; margin: -55px; display: none; pointer-events: none; }
+    #ring circle { fill: none; stroke: rgba(255, 255, 255, 0.45); stroke-width: 2; }
+    #ring #fill { stroke: #ffd166; stroke-width: 5; stroke-dasharray: 251.3; stroke-dashoffset: 251.3; }
+    #ring.wrong #track { animation: wrong 0.7s; }
+    @keyframes wrong { 0%, 70% { stroke: #ff5d5d; stroke-width: 6; } }
+
+    /* The dial along the bottom rotates the found object; its tick marks slide as it turns */
+    #dial {
+      position: fixed; left: 0; right: 0; bottom: 0; height: 88px; padding-bottom: env(safe-area-inset-bottom);
+      display: none; align-items: center; justify-content: center;
+      touch-action: none; cursor: ew-resize; user-select: none; -webkit-user-select: none;
+      font-size: 15px; text-shadow: 0 0 6px #000;
+      background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.35) 0 2px, transparent 2px 20px), rgba(2, 4, 10, 0.6);
+      border-top: 1px solid rgba(255, 255, 255, 0.3);
+    }
   </style>
 </head>
 <body>
-  <video id="video" playsinline muted autoplay></video>
+  <!-- HUD: filled in by main.js -->
+  <div id="hud"><span id="round"></span><span id="timer"></span></div>
 
-  <!-- Start page. Needs a tap so iOS will ask for motion permission. -->
-  <div id="start" class="overlay">
-    <button>Start</button>
-  </div>
+  <div id="prompt"></div>
 
-  <!-- HUD: the target outline + progress ring, fixed in the centre of the screen -->
-  <svg id="hud" class="overlay" viewBox="-100 -100 200 200" width="100%" height="100%">
-    <circle r="60" fill="none" stroke="#000" stroke-width="10" opacity="0.5" /> <!-- dark track so the ring shows on any background -->
-    <circle id="ring" r="60" fill="none" stroke="#0f0" stroke-width="4"
-            stroke-dasharray="377" stroke-dashoffset="377" transform="rotate(-90)" />
+  <!-- The ring: a faint track and the gold fill that main.js advances -->
+  <svg id="ring" viewBox="-50 -50 100 100">
+    <circle id="track" r="40" />
+    <circle id="fill" r="40" transform="rotate(-90)" />
   </svg>
 
-  <div id="round"></div>
+  <!-- Shown once the right constellation is found: drag here to rotate -->
+  <div id="dial">&#10226; drag here to rotate &#10227;</div>
+
+  <!-- Start page. The clock starts on the tap. -->
+  <div id="start" class="overlay">
+    <h1>LAUNCH</h1>
+    <p>Drag the sky to find the constellation that answers the prompt, and hold the ring on it. Then rotate the object to fit. Fastest time wins.</p>
+    <button class="primary">Start</button>
+  </div>
 
   <!-- DONE screen: the score is filled in by main.js -->
   <div id="done" class="overlay">
     <h1>DONE</h1>
-    <div id="scores"></div>
+    <div id="score"></div>
+    <button class="primary">Play again</button>
   </div>
 
   <script type="module" src="./main.js"></script>

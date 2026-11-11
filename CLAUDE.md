@@ -30,7 +30,7 @@ Check every feature against all three parts of this definition, with these curre
   - Eliminate virtual parallelism. One bot instance should not be able to cheaply run many games at once (e.g. in headless browsers or emulators).
   - Make a bot that beats a real human's time very expensive to build.
 - **Accepted limitation:** we cannot stop real human click farms, and we don't try to.
-- **Mobile first.** The game is played on a phone, using its motion sensors and camera.
+- **Phone and computer.** The game is touch-first but must be just as playable with a mouse. It uses no motion sensors and no camera: play tests showed tilt control made the score depend on where the player was (in a car, at dinner).
 
 ## Out of scope
 
@@ -45,13 +45,27 @@ This repo is only about what **the game itself** can do to filter bots and rank 
 
 Logic that will later run on the server (issuing sessions, timing rounds on the server's clock, validating and storing scores) should live in clearly separated client-side code that mimics a server, so it can be lifted into Lambda later. Do not trust or depend on it as real security; it is a stand-in.
 
-Current state: no server simulation exists yet. The score is just the local time from the first round to the last (`finish()` in `main.js`).
+Current state: no server simulation exists yet. The score is just the local time from the Start tap to the last lock (`elapsed()` and `lock()` in `main.js`).
+
+## Game design
+
+The player floats in space with Earth directly below. Constellations (outlines of objects) are scattered all the way round the player and overhead, never below. A ring marks the centre of the screen. A game is 3 rounds, and in each round thinking and moving happen together rather than in separate steps:
+
+1. **Find.** A random prompt ("Find the object that melts in the sun") appears and the player can drag the sky straight away. Exactly one constellation answers the prompt. The outlines carry no name labels, in the page or the markup: recognising them is part of the task.
+2. **Hold.** Holding the ring on a constellation fills it. A full ring on a wrong constellation flashes red and dims that constellation; there is no explicit penalty, because the time the hold took is the penalty. A full ring on the right one fades the object in at the centre of the screen, turned away from its constellation.
+3. **Lock.** The player rotates the object with the dial. The round locks the instant position and rotation are both within a tight tolerance.
+
+The score is the total time. Rules that keep it fair:
+
+- Prompts, objects, positions and rotations are randomised per player, but the **amount** of work is fixed: every round the answer is the same angular distance from where the player is looking, and every player gets the same set of rotation amounts in a random order and direction.
+- Objects that are arguable for a prompt (`maybe` in `PROMPTS`) are never in the sky with it.
+- The field of view is fixed along the screen's longer side, so phones and desktops see the same amount of sky.
 
 ## Stack and layout
 
 - Vite + plain JavaScript (ES modules) + three.js. No framework, no TypeScript.
-- `index.html` contains the markup, styles and overlays (the Start page, then the HUD, then the DONE screen).
-- `main.js` contains all game logic: tunables at the top, then shapes, scene, rounds, phone orientation mapped to the camera, the overlap check, and the game loop.
+- `index.html` contains the markup, styles and overlays (the HUD, the prompt, the ring, the rotation dial, the Start page and the DONE screen).
+- `main.js` contains all game logic: tunables at the top, then objects and prompts, the scene (stars, Earth, constellations), game state, rounds, controls, the lock check, and the game loop.
 - `vite.config.js` sets `base: "./"` so the build works from any host or sub-path.
 
 ## Commands
@@ -62,9 +76,7 @@ Current state: no server simulation exists yet. The score is just the local time
 
 ## Testing on a phone
 
-Motion sensors and the camera only work in a secure context (HTTPS or localhost). A LAN address served by `vite --host` is plain HTTP, so sensors won't work there. Test on a phone through a Netlify branch deploy instead.
-
-On iOS, motion permission must be requested from inside a tap handler. That's why the Start button exists.
+The game needs no permissions or secure context, so `npm run dev -- --host` on the LAN works, as does a Netlify branch deploy.
 
 ## Deployment
 
