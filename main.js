@@ -22,7 +22,7 @@ const ROTATE_AMOUNTS = [70 * DEG, 110 * DEG, 150 * DEG]
 const SPIN_SECONDS = 20         // every constellation spins in place, one full turn in this long, so its shape is never seen at one fixed angle; same speed for everyone, random direction
 const POS_TOLERANCE = 0.8 * DEG // how close the constellation must be to screen centre for the lock ring to fill
 const TILT_TOLERANCE = 3 * DEG  // how well the rotation must match for the lock ring to fill
-const LOCK_SECONDS = 5          // how long the match must be held to lock; long enough that the spinning answer has to be tracked with the dial, not waited for
+const LOCK_SECONDS = 5          // total time the match must be held to lock (it adds up across slips); long enough that the spinning answer has to be tracked with the dial, not waited for
 const MIN_SEPARATION = 30 * DEG // smallest angle between two constellations, so they never overlap
 const SKY_ELEVATION = [15 * DEG, 75 * DEG] // constellations sit all the way round the player, between these heights above the horizon; never below
 const START_ELEVATION = 8 * DEG // where the player looks at the start: just above the horizon, with Earth in view
@@ -526,11 +526,12 @@ function loop(now) {
     held.rotation.z = turn
     dialEl.style.backgroundPositionX = `${-turn / TURN_PER_PIXEL}px` // the tick marks slide with the rotation
     // The lock ring fills green while position and rotation are both right, and turns
-    // red and drains at the same rate when either slips. A full ring locks the round.
+    // red and pauses when either slips. It never drains: time spent matched adds up,
+    // so a slip costs only the time it takes to get back on. A full ring locks the round.
     const onTarget = forward.angleTo(target.position) < POS_TOLERANCE
     held.material.color.set(onTarget ? ON_TARGET_COLOR : HELD_COLOR)
     const matched = onTarget && isMatched()
-    progress = THREE.MathUtils.clamp(progress + (matched ? dt : -dt) / LOCK_SECONDS, 0, 1)
+    if (matched) progress = Math.min(1, progress + dt / LOCK_SECONDS)
     ringEl.classList.toggle('holding', matched)
     ringEl.classList.toggle('slipping', !matched)
     fillEl.style.strokeDashoffset = RING_LENGTH * (1 - progress)
