@@ -38,12 +38,15 @@
       text-align: center; font-size: 20px; font-weight: 600; text-shadow: 0 0 6px #000; pointer-events: none;
     }
 
-    /* The ring at screen centre: hold it on a constellation and it fills; a wrong one flashes it red */
+    /* The ring at screen centre: hold it on a constellation and it fills; a wrong one flashes it red.
+       While fitting the object it is the lock hold: green while matched, red and draining while not */
     #ring { position: fixed; top: 50%; left: 50%; width: 110px; height: 110px; margin: -55px; display: none; pointer-events: none; }
     #ring circle { fill: none; stroke: rgba(255, 255, 255, 0.45); stroke-width: 2; }
     #ring #fill { stroke: #ffd166; stroke-width: 5; stroke-dasharray: 251.3; stroke-dashoffset: 251.3; }
     #ring.wrong #track { animation: wrong 0.7s; }
     @keyframes wrong { 0%, 70% { stroke: #ff5d5d; stroke-width: 6; } }
+    #ring.holding #fill { stroke: #4dff88; }
+    #ring.slipping #fill, #ring.slipping #track { stroke: #ff5d5d; }
 
     /* The dial along the bottom rotates the found object; its tick marks slide as it turns */
     #dial {
@@ -74,7 +77,7 @@
   <!-- Start page. The clock starts on the tap. -->
   <div id="start" class="overlay">
     <h1>LAUNCH</h1>
-    <p>Drag the sky to find the constellation that answers the prompt, and hold the ring on it. Then rotate the object to fit. Fastest time wins.</p>
+    <p>Drag the sky to find the constellation that answers the prompt, and hold the ring on it. Then rotate the object to fit, and keep it fitted while the ring fills. Fastest time wins.</p>
     <button class="primary">Start</button>
   </div>
 

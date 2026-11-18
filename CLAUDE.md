@@ -49,15 +49,15 @@ Current state: no server simulation exists yet. The score is just the local time
 
 ## Game design
 
-The player floats in space with Earth directly below. Constellations (outlines of objects) are scattered all the way round the player and overhead, never below. A ring marks the centre of the screen. A game is 3 rounds, and in each round thinking and moving happen together rather than in separate steps:
+The player floats in space with Earth directly below. Constellations (outlines of objects) are scattered all the way round the player and overhead, never below, and each one slowly spins in place. The player drags the sky freely anywhere in the dome, up to straight overhead. A ring marks the centre of the screen. A game is 3 rounds, and in each round thinking and moving happen together rather than in separate steps:
 
 1. **Find.** A random prompt ("Find the object that melts in the sun") appears and the player can drag the sky straight away. Exactly one constellation answers the prompt. The outlines carry no name labels, in the page or the markup: recognising them is part of the task.
 2. **Hold.** Holding the ring on a constellation fills it. A full ring on a wrong constellation flashes red and dims that constellation; there is no explicit penalty, because the time the hold took is the penalty. A full ring on the right one fades the object in at the centre of the screen, turned away from its constellation.
-3. **Lock.** The player rotates the object with the dial. The round locks the instant position and rotation are both within a tight tolerance.
+3. **Lock.** The player rotates the object with the dial to match the constellation, which keeps spinning. While position and rotation are both within a tight tolerance the ring fills green; when either slips it turns red and drains. A full ring locks the round. The hold means the player has to track the spin with the dial: waiting for the constellation to come round to the object only fills the ring for a moment.
 
 The score is the total time. Rules that keep it fair:
 
-- Prompts, objects, positions and rotations are randomised per player, but the **amount** of work is fixed: every round the answer is the same angular distance from where the player is looking, and every player gets the same set of rotation amounts in a random order and direction.
+- Prompts, objects, positions and rotations are randomised per player, but the **amount** of work is fixed: every round the answer is the same angular distance from where the player is looking, and every player gets the same set of rotation amounts in a random order and direction. Every constellation spins at the same speed, and the answer always spins away from the match, so the spin never shortens one player's rotation and lengthens another's.
 - Objects that are arguable for a prompt (`maybe` in `PROMPTS`) are never in the sky with it.
 - The field of view is fixed along the screen's longer side, so phones and desktops see the same amount of sky.
 

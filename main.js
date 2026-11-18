@@ -20,8 +20,9 @@ const RING_COUNT = 3            // ...and so do some wrong ones, so that distanc
 // differs, but everyone does the same total rotation and never a trivially small one.
 const ROTATE_AMOUNTS = [70 * DEG, 110 * DEG, 150 * DEG]
 const SPIN_SECONDS = 20         // every constellation spins in place, one full turn in this long, so its shape is never seen at one fixed angle; same speed for everyone, random direction
-const POS_TOLERANCE = 0.8 * DEG // how close the constellation must be to screen centre to lock
-const TILT_TOLERANCE = 3 * DEG  // how well the rotation must match to lock
+const POS_TOLERANCE = 0.8 * DEG // how close the constellation must be to screen centre for the lock ring to fill
+const TILT_TOLERANCE = 3 * DEG  // how well the rotation must match for the lock ring to fill
+const LOCK_SECONDS = 5          // how long the match must be held to lock; long enough that the spinning answer has to be tracked with the dial, not waited for
 const MIN_SEPARATION = 30 * DEG // smallest angle between two constellations, so they never overlap
 const SKY_ELEVATION = [15 * DEG, 75 * DEG] // constellations sit all the way round the player, between these heights above the horizon; never below
 const START_ELEVATION = 8 * DEG // where the player looks at the start: just above the horizon, with Earth in view
@@ -379,7 +380,8 @@ function reveal() {
   held.geometry = target.children[0].geometry
   held.material.opacity = 0
   held.visible = true
-  ringEl.style.display = 'none'
+  progress = 0 // the ring now shows the lock hold
+  ringEl.classList.remove('wrong')
   dialEl.style.display = 'flex'
   phase = 'rotate'
 }
@@ -471,6 +473,8 @@ function isMatched() {
 function lock() {
   held.material.opacity = 1
   held.material.color.set(LOCKED_COLOR)
+  ringEl.style.display = 'none'
+  ringEl.classList.remove('holding', 'slipping')
   if (round < ROUNDS) {
     phase = 'locked'
     return setTimeout(startRound, LOCK_PAUSE)
@@ -521,10 +525,16 @@ function loop(now) {
     held.material.opacity = Math.min(1, held.material.opacity + dt / FADE_SECONDS)
     held.rotation.z = turn
     dialEl.style.backgroundPositionX = `${-turn / TURN_PER_PIXEL}px` // the tick marks slide with the rotation
-    // No second hold: the round locks the instant position and rotation are both right.
+    // The lock ring fills green while position and rotation are both right, and turns
+    // red and drains at the same rate when either slips. A full ring locks the round.
     const onTarget = forward.angleTo(target.position) < POS_TOLERANCE
     held.material.color.set(onTarget ? ON_TARGET_COLOR : HELD_COLOR)
-    if (onTarget && isMatched()) lock()
+    const matched = onTarget && isMatched()
+    progress = THREE.MathUtils.clamp(progress + (matched ? dt : -dt) / LOCK_SECONDS, 0, 1)
+    ringEl.classList.toggle('holding', matched)
+    ringEl.classList.toggle('slipping', !matched)
+    fillEl.style.strokeDashoffset = RING_LENGTH * (1 - progress)
+    if (progress >= 1) lock()
   }
   if (phase === 'search' || phase === 'rotate' || phase === 'locked') timerEl.textContent = `${elapsed().toFixed(2)}s`
 
