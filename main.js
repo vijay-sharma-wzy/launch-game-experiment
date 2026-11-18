@@ -19,7 +19,12 @@ const RING_COUNT = 3            // ...and so do some wrong ones, so that distanc
 // per round. Each player gets these in a random order and direction: every round
 // differs, but everyone does the same total rotation and never a trivially small one.
 const ROTATE_AMOUNTS = [70 * DEG, 110 * DEG, 150 * DEG]
-const SPIN_SECONDS = 20         // every constellation spins in place, one full turn in this long, so its shape is never seen at one fixed angle; same speed for everyone, random direction
+// Every constellation spins in place, so its shape is never seen at one fixed angle.
+// Speeds are seconds per full turn; lower is faster.
+const SPIN_SECONDS = [20, 40]   // each wrong constellation picks a speed in this range, so speed doesn't mark out the answer
+// The answer's speed changes how hard it is to track with the dial, so it isn't left
+// to chance: one per round, and every player gets the same set in a random order.
+const ANSWER_SPIN_SECONDS = [24, 30, 36]
 const POS_TOLERANCE = 0.8 * DEG // how close the constellation must be to screen centre for the lock ring to fill
 const TILT_TOLERANCE = 3 * DEG  // how well the rotation must match for the lock ring to fill
 const LOCK_SECONDS = 5          // total time the match must be held to lock (it adds up across slips); long enough that the spinning answer has to be tracked with the dial, not waited for
@@ -121,6 +126,7 @@ function shuffle(list) {
 // where that's possible.
 function planRounds() {
   const amounts = shuffle(ROTATE_AMOUNTS)
+  const spins = shuffle(ANSWER_SPIN_SECONDS)
   const used = []
   return shuffle(PROMPTS).slice(0, ROUNDS).map(({ text, yes, maybe = [] }, i) => {
     const fresh = yes.filter((name) => !used.includes(name))
@@ -131,6 +137,7 @@ function planRounds() {
       text,
       names: [answer, ...shuffle(wrong).slice(0, SKY_COUNT - 1)],
       rotate: amounts[i] * (Math.random() < 0.5 ? -1 : 1),
+      spinSeconds: spins[i],
     }
   })
 }
@@ -349,7 +356,7 @@ function startRound() {
 
   round++
   roundEl.textContent = `Round ${round} / ${ROUNDS}`
-  const { text, names, rotate } = rounds[round - 1]
+  const { text, names, rotate, spinSeconds } = rounds[round - 1]
   promptEl.textContent = `Find the object that ${text}`
 
   sky = scatter().map((d, i) => {
@@ -361,7 +368,12 @@ function startRound() {
     // The answer keeps spinning while the player rotates it, so its direction is not
     // left to chance: it always spins away from the match (a positive spin lowers its
     // apparent tilt), so it never shortens one player's turn and lengthens another's.
-    constellation.userData.spin = i === 0 ? -Math.sign(rotate) : Math.random() < 0.5 ? -1 : 1
+    // The rest alternate, so every sky has an even mix of clockwise and anticlockwise
+    // and the direction never hints at which one is the answer. They're scattered at
+    // random, so alternating by list order still looks random in the sky.
+    const direction = i === 0 ? -Math.sign(rotate) : i % 2 ? 1 : -1
+    const seconds = i === 0 ? spinSeconds : SPIN_SECONDS[0] + Math.random() * (SPIN_SECONDS[1] - SPIN_SECONDS[0])
+    constellation.userData.spin = direction * 2 * Math.PI / seconds // radians per second
     scene.add(constellation)
     return constellation
   })
@@ -519,7 +531,7 @@ function loop(now) {
   // dial, so fitting it means tracking a moving shape. Only a locked answer stops,
   // so the match stays lined up on screen.
   for (const c of sky) {
-    if (c !== target || phase === 'search' || phase === 'rotate') c.rotateZ(c.userData.spin * dt * 2 * Math.PI / SPIN_SECONDS)
+    if (c !== target || phase === 'search' || phase === 'rotate') c.rotateZ(c.userData.spin * dt)
   }
 
   if (phase === 'search') {

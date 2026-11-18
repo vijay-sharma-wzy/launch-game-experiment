@@ -57,7 +57,7 @@ The player floats in space with Earth directly below. Constellations (outlines o
 
 The score is the total time. Rules that keep it fair:
 
-- Prompts, objects, positions and rotations are randomised per player, but the **amount** of work is fixed: every round the answer is the same angular distance from where the player is looking, and every player gets the same set of rotation amounts in a random order and direction. Every constellation spins at the same speed, and the answer always spins away from the match, so the spin never shortens one player's rotation and lengthens another's.
+- Prompts, objects, positions and rotations are randomised per player, but the **amount** of work is fixed: every round the answer is the same angular distance from where the player is looking, and every player gets the same set of rotation amounts in a random order and direction. Constellations spin at different speeds, half clockwise and half anticlockwise. The answer's speed comes from a fixed set (one per round, shuffled per player), and it always spins away from the match, so the spin never shortens one player's rotation and lengthens another's.
 - Objects that are arguable for a prompt (`maybe` in `PROMPTS`) are never in the sky with it.
 - The field of view is fixed along the screen's longer side, so phones and desktops see the same amount of sky.
 
