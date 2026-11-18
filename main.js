@@ -19,6 +19,7 @@ const RING_COUNT = 3            // ...and so do some wrong ones, so that distanc
 // per round. Each player gets these in a random order and direction: every round
 // differs, but everyone does the same total rotation and never a trivially small one.
 const ROTATE_AMOUNTS = [70 * DEG, 110 * DEG, 150 * DEG]
+const SPIN_SECONDS = 20         // every constellation spins in place, one full turn in this long, so its shape is never seen at one fixed angle; same speed for everyone, random direction
 const POS_TOLERANCE = 0.8 * DEG // how close the constellation must be to screen centre to lock
 const TILT_TOLERANCE = 3 * DEG  // how well the rotation must match to lock
 const MIN_SEPARATION = 30 * DEG // smallest angle between two constellations, so they never overlap
@@ -343,6 +344,7 @@ function startRound() {
     // Face the player, upright as seen when centred on screen, then roll at random.
     constellation.rotation.set(Math.asin(d.y), Math.atan2(-d.x, -d.z), 0, 'YXZ')
     constellation.rotateZ(Math.random() * 2 * Math.PI)
+    constellation.userData.spin = Math.random() < 0.5 ? -1 : 1
     scene.add(constellation)
     return constellation
   })
@@ -491,6 +493,12 @@ function loop(now) {
   lastTime = now
   earthMaterial.uniforms.drift.value = now * 0.000002
   camera.getWorldDirection(forward)
+
+  // Spin every constellation in place. The answer stops once it's found, so the
+  // player fits the dial to a still shape rather than chasing a moving one.
+  for (const c of sky) {
+    if (c !== target || phase === 'search') c.rotateZ(c.userData.spin * dt * 2 * Math.PI / SPIN_SECONDS)
+  }
 
   if (phase === 'search') {
     // The ring fills only while it stays on one untested constellation, and
