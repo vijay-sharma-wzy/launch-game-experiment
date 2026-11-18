@@ -61,7 +61,7 @@ The score is the total time. Rules that keep it fair:
 - Objects that are arguable for a prompt (`maybe` in `PROMPTS`) are never in the sky with it.
 - The field of view is fixed along the screen's longer side, so phones and desktops see the same amount of sky.
 
-Visual noise makes a screen-reading bot's job harder without changing what a human sees: every outline is drawn in slightly varying blues whose brightness and thickness waver over time, corners wobble by a pixel or two, stars twinkle, a faint nebula and Milky Way band sit behind everything in similar blues, and faint decoy strokes between stray stars (new each round, kept clear of the constellations) give a shape detector extra pieces that belong to nothing.
+Visual noise makes a screen-reading bot's job harder without changing what a human sees: every outline is drawn in slightly varying blues whose brightness and thickness waver over time, corners wobble by a pixel or two, stars twinkle, and a nebula and Milky Way band in similar blues sit behind everything, drifting round the sky in two opposing layers with waves of brightness rolling through them, so the background is never still.
 
 ## Stack and layout
 

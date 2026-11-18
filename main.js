@@ -2,8 +2,6 @@ import * as THREE from 'three'
 import { Line2 } from 'three/addons/lines/Line2.js'
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
-import { LineSegments2 } from 'three/addons/lines/LineSegments2.js'
-import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
 
 // ---- Tunables ----------------------------------------------------------------
 const DEG = Math.PI / 180
@@ -48,8 +46,8 @@ const LINE_LIGHTNESS_SPREAD = 0.12 // ...and this much lighter or darker, so a s
 const SHIMMER = 0.2                // each constellation's brightness wavers by up to this fraction, out of step with the others
 const LINE_WIDTHS = [1.5, 2.8]     // pixels; each outline's thickness wavers between these
 const JITTER = 0.015               // how far each corner wanders, as a fraction of an object's half-size (about 1–2 px on a phone)
-const DECOY_STROKES = 30           // faint stray lines between stars each round, so a shape detector finds pieces that belong to nothing
-const DECOY_CLEARANCE = 16 * DEG   // decoys stay this far from every constellation's centre, so a human never reads one as part of an outline
+const NEBULA_TURN_SECONDS = [90, 60] // the nebula is two layers drifting round the sky in opposite directions, one full turn in this long each...
+const NEBULA_PULSE = 0.4           // ...with waves of brightness rolling through them, up to this fraction brighter or darker
 const GLOW_SECONDS = 0.35          // the "fitted" glow eases in and out this slowly instead of snapping on and off
 
 const HELD_COLOR = 0xffd166     // the object the player is fitting
@@ -200,10 +198,11 @@ const dot = dotTexture()
 const starMaterial = (size, opacity) =>
   new THREE.PointsMaterial({ map: dot, size, sizeAttenuation: false, transparent: true, opacity, depthWrite: false })
 
-// A faint nebula and Milky Way band in the same blues as the constellations, so a
-// bot can't find the outlines just by looking for blue pixels next to dark ones.
-// It's painted on the inside of a big sphere. The band and clouds keep away from the
-// top of the map, which pinches together straight overhead.
+// A moving nebula and Milky Way band in the same blues as the constellations, so a
+// bot can't find the outlines just by looking for blue pixels next to dark ones, and
+// can't subtract a still background either. It's painted on the inside of a big
+// sphere. The band and clouds keep away from the top of the map, which pinches
+// together straight overhead.
 // The pixels are worked out here rather than drawn with canvas gradients, because
 // browsers dither gradients in a regular pattern that shows as a grid once stretched
 // over the sky.
@@ -230,33 +229,64 @@ function nebulaTexture() {
     const x = Math.random() * w
     const latitude = Math.atan(Math.tan(tilt) * Math.sin(x / w * 2 * Math.PI + shift))
     const y = (0.5 - latitude / Math.PI) * h + (Math.random() - 0.5) * h * 0.07
-    blob(x, y, 8 + Math.random() * 22, [110, 168, 255], 0.02 + Math.random() * 0.03)
+    blob(x, y, 8 + Math.random() * 22, [110, 168, 255], 0.03 + Math.random() * 0.04)
   }
   // Nebula clouds, between about 55° up and the horizon.
-  for (let i = 0; i < 35; i++) {
+  for (let i = 0; i < 45; i++) {
     const rgb = [[110, 168, 255], [80, 110, 220], [150, 120, 255]][i % 3]
-    blob(Math.random() * w, h * (0.2 + Math.random() * 0.32), 30 + Math.random() * 80, rgb, 0.03 + Math.random() * 0.05)
+    blob(Math.random() * w, h * (0.2 + Math.random() * 0.32), 30 + Math.random() * 80, rgb, 0.05 + Math.random() * 0.07)
   }
-  // Onto a dark sky, with a little random noise when rounding so no banding or pattern shows.
+  // Just the light, with a little random noise when rounding so no banding or pattern
+  // shows; the shader adds the dark sky underneath.
   const canvas = document.createElement('canvas')
   canvas.width = w
   canvas.height = h
   const ctx = canvas.getContext('2d')
   const image = ctx.createImageData(w, h)
-  const base = [2, 4, 10]
   for (let p = 0; p < w * h; p++) {
-    for (let c = 0; c < 3; c++) image.data[p * 4 + c] = base[c] + light[p * 3 + c] + Math.random() - 0.5
+    for (let c = 0; c < 3; c++) image.data[p * 4 + c] = light[p * 3 + c] + Math.random() - 0.5
     image.data[p * 4 + 3] = 255
   }
   ctx.putImageData(image, 0, 0)
   const texture = new THREE.CanvasTexture(canvas)
-  texture.colorSpace = THREE.SRGBColorSpace
+  texture.wrapS = THREE.RepeatWrapping // so the layers can drift round and round
   return texture
 }
-const nebula = new THREE.Mesh(
-  new THREE.SphereGeometry(90, 64, 32),
-  new THREE.MeshBasicMaterial({ map: nebulaTexture(), side: THREE.BackSide, depthWrite: false }),
-)
+
+// Two copies of the nebula, one flipped so they never line up, drift round the sky in
+// opposite directions, and waves of brightness roll through them.
+const nebulaMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    map: { value: nebulaTexture() },
+    time: { value: 0 },
+    drift: { value: new THREE.Vector2(1 / NEBULA_TURN_SECONDS[0], -1 / NEBULA_TURN_SECONDS[1]) },
+    pulse: { value: NEBULA_PULSE },
+  },
+  side: THREE.BackSide,
+  depthWrite: false,
+  vertexShader: `
+    varying vec2 vUv;
+    varying vec3 vDir;
+    void main() {
+      vUv = uv;
+      vDir = normalize(position);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }`,
+  fragmentShader: `
+    uniform sampler2D map;
+    uniform float time;
+    uniform vec2 drift;
+    uniform float pulse;
+    varying vec2 vUv;
+    varying vec3 vDir;
+    void main() {
+      vec3 a = texture2D(map, vUv + vec2(time * drift.x, 0.0)).rgb;
+      vec3 b = texture2D(map, vec2(1.0 - vUv.x + time * drift.y, vUv.y)).rgb;
+      float wave = 1.0 + pulse * sin(vDir.x * 4.0 + vDir.z * 3.0 + time * 0.7) * sin(vDir.y * 5.0 - time * 0.45);
+      gl_FragColor = vec4(vec3(0.008, 0.016, 0.04) + (a + 0.8 * b) * wave, 1.0);
+    }`,
+})
+const nebula = new THREE.Mesh(new THREE.SphereGeometry(90, 64, 32), nebulaMaterial)
 nebula.renderOrder = -1 // behind everything
 scene.add(nebula)
 
@@ -409,42 +439,6 @@ function shimmer(constellation, t) {
   line.material.linewidth = LINE_WIDTHS[0] + (LINE_WIDTHS[1] - LINE_WIDTHS[0]) * (0.5 + 0.5 * Math.sin(t * 1.1 + phase * 1.3))
 }
 
-// Faint stray strokes between stars: short chains that look like scraps of
-// constellations. A human reads them as background next to the bright outlines, but a
-// shape detector picks them up as more candidates. New ones every round, kept clear
-// of the real constellations so they never look like part of one.
-const decoyLine = new LineMaterial({ color: 0x6ea8ff, linewidth: 1.5, transparent: true, opacity: 0.35, depthTest: false })
-const decoyStars = starMaterial(5, 0.6)
-const decoys = new THREE.Group()
-scene.add(decoys)
-
-function scatterDecoys() {
-  for (const child of decoys.children) child.geometry.dispose()
-  decoys.clear()
-  const clear = (d) => d.y > Math.sin(3 * DEG) && sky.every((c) => c.position.angleTo(d) >= DECOY_CLEARANCE)
-  const toSky = (d) => d.clone().multiplyScalar(DISTANCE).toArray()
-  const segments = []
-  const stars = []
-  for (let strokes = 0; strokes < DECOY_STROKES;) {
-    let from = new THREE.Vector3().randomDirection()
-    if (!clear(from)) continue
-    stars.push(...toSky(from))
-    for (let links = 1 + Math.floor(Math.random() * 3); links > 0 && strokes < DECOY_STROKES; links--) {
-      const axis = new THREE.Vector3().randomDirection().cross(from).normalize()
-      const to = from.clone().applyAxisAngle(axis, (3 + Math.random() * 6) * DEG)
-      if (!clear(to)) break
-      segments.push(...toSky(from), ...toSky(to))
-      stars.push(...toSky(to))
-      from = to
-      strokes++
-    }
-  }
-  decoys.add(
-    new LineSegments2(new LineSegmentsGeometry().setPositions(segments), decoyLine),
-    new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(stars, 3)), decoyStars),
-  )
-}
-
 // The object the player has found, pinned to the centre of the screen. It sits at
 // the same distance as the constellations, so it is the same size on screen.
 const held = new Line2(GEOMETRY.key.line, new LineMaterial({ color: HELD_COLOR, linewidth: 4, depthTest: false, transparent: true }))
@@ -542,7 +536,6 @@ function startRound() {
     return constellation
   })
   target = sky[0]
-  scatterDecoys()
   rejected = new Set()
   hovered = undefined
   progress = 0
@@ -694,6 +687,7 @@ function loop(now) {
   lastTime = now
   const t = now / 1000
   earthMaterial.uniforms.drift.value = now * 0.000002
+  nebulaMaterial.uniforms.time.value = t
   camera.getWorldDirection(forward)
 
   for (const stars of twinkling) stars.material.opacity = 0.7 * (0.7 + 0.3 * Math.sin(t * 1.3 + stars.userData.phase))
