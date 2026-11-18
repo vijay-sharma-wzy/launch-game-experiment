@@ -53,7 +53,7 @@ The player floats in space with Earth directly below. Constellations (outlines o
 
 1. **Find.** A random prompt ("Find the object that melts in the sun") appears and the player can drag the sky straight away. Exactly one constellation answers the prompt. The outlines carry no name labels, in the page or the markup: recognising them is part of the task.
 2. **Hold.** Holding the ring on a constellation fills it. A full ring on a wrong constellation flashes red and dims that constellation; there is no explicit penalty, because the time the hold took is the penalty. A full ring on the right one fades the object in at the centre of the screen, turned away from its constellation.
-3. **Lock.** The player rotates the object with the dial to match the constellation, which keeps spinning. While position and rotation are both within a tight tolerance the ring fills green; when either slips it turns red and pauses, but never drains, so matched time adds up. A full ring locks the round. The hold means the player has to track the spin with the dial: waiting for the constellation to come round to the object only adds a moment per turn.
+3. **Lock.** The player rotates the object with the dial to match the constellation, which keeps spinning. A small dot on the object's centre and a bigger one on the constellation's (shown only once it's found) guide the position. While position and rotation are both within a tight tolerance the ring fills green; when either slips it turns red and pauses, but never drains, so matched time adds up. A full ring locks the round. The hold means the player has to track the spin with the dial: waiting for the constellation to come round to the object only adds a moment per turn.
 
 The score is the total time. Rules that keep it fair:
 

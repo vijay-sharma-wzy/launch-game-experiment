@@ -30,6 +30,8 @@ const HORIZON_DIP = 5 * DEG     // how far below eye level Earth's horizon sits
 const TURN_PER_PIXEL = 0.5 * DEG  // rotation per pixel dragged on the dial; geared down for fine control
 const TURN_PER_WHEEL = 0.03 * DEG // rotation per unit of mouse wheel, so desktop players can pan and rotate at once; one notch must not jump the tolerance
 const LOCK_PAUSE = 600          // ms the matched object stays on screen before the next round
+const HELD_DOT_SIZE = 8         // pixels; the dot at the held object's centre...
+const TARGET_DOT_SIZE = 18      // ...sits inside the answer's bigger centre dot when the position is about right
 
 const HELD_COLOR = 0xffd166     // the object the player is fitting
 const ON_TARGET_COLOR = 0xffffff // position is right, rotation still to do
@@ -282,6 +284,17 @@ held.renderOrder = 1 // drawn over the constellations
 held.visible = false
 camera.add(held)
 
+// Centre dots that guide the position while fitting: a small one on the held object
+// and a bigger one on the answer. The answer's dot is only added once it's found,
+// so it never gives the answer away.
+const centrePoint = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3))
+const heldDot = new THREE.Points(centrePoint, starMaterial(HELD_DOT_SIZE, 1))
+const targetDot = new THREE.Points(centrePoint, starMaterial(TARGET_DOT_SIZE, 1))
+heldDot.material.depthTest = targetDot.material.depthTest = false
+targetDot.material.color.set(0x6ea8ff) // the constellation blue
+heldDot.renderOrder = 2 // drawn over the answer's dot
+held.add(heldDot)
+
 // ---- Game state ----------------------------------------------------------------
 const rounds = planRounds()
 let phase = 'start' // 'start' -> ('search' -> 'rotate' -> 'locked') per round -> 'done'
@@ -378,6 +391,7 @@ function reject(constellation) {
 function reveal() {
   turn = rounds[round - 1].rotate - apparentTilt()
   held.geometry = target.children[0].geometry
+  target.add(targetDot) // moves it off last round's answer
   held.material.opacity = 0
   held.visible = true
   progress = 0 // the ring now shows the lock hold
