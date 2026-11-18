@@ -21,10 +21,10 @@ const RING_COUNT = 3            // ...and so do some wrong ones, so that distanc
 const ROTATE_AMOUNTS = [70 * DEG, 110 * DEG, 150 * DEG]
 // Every constellation spins in place, so its shape is never seen at one fixed angle.
 // Speeds are seconds per full turn; lower is faster.
-const SPIN_SECONDS = [20, 40]   // each wrong constellation picks a speed in this range, so speed doesn't mark out the answer
+const SPIN_SECONDS = [16, 32]   // each wrong constellation picks a speed in this range, so speed doesn't mark out the answer
 // The answer's speed changes how hard it is to track with the dial, so it isn't left
 // to chance: one per round, and every player gets the same set in a random order.
-const ANSWER_SPIN_SECONDS = [24, 30, 36]
+const ANSWER_SPIN_SECONDS = [19, 24, 29]
 const POS_TOLERANCE = 0.8 * DEG // how close the constellation must be to screen centre for the lock ring to fill
 const TILT_TOLERANCE = 3 * DEG  // how well the rotation must match for the lock ring to fill
 const LOCK_SECONDS = 5          // total time the match must be held to lock (it adds up across slips); long enough that the spinning answer has to be tracked with the dial, not waited for
