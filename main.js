@@ -335,7 +335,7 @@ function startRound() {
 
   round++
   roundEl.textContent = `Round ${round} / ${ROUNDS}`
-  const { text, names } = rounds[round - 1]
+  const { text, names, rotate } = rounds[round - 1]
   promptEl.textContent = `Find the object that ${text}`
 
   sky = scatter().map((d, i) => {
@@ -344,7 +344,10 @@ function startRound() {
     // Face the player, upright as seen when centred on screen, then roll at random.
     constellation.rotation.set(Math.asin(d.y), Math.atan2(-d.x, -d.z), 0, 'YXZ')
     constellation.rotateZ(Math.random() * 2 * Math.PI)
-    constellation.userData.spin = Math.random() < 0.5 ? -1 : 1
+    // The answer keeps spinning while the player rotates it, so its direction is not
+    // left to chance: it always spins away from the match (a positive spin lowers its
+    // apparent tilt), so it never shortens one player's turn and lengthens another's.
+    constellation.userData.spin = i === 0 ? -Math.sign(rotate) : Math.random() < 0.5 ? -1 : 1
     scene.add(constellation)
     return constellation
   })
