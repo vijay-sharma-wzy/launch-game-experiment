@@ -48,6 +48,10 @@ const LINE_WIDTHS = [1.5, 2.8]     // pixels; each outline's thickness wavers be
 const JITTER = 0.015               // how far each corner wanders, as a fraction of an object's half-size (about 1–2 px on a phone)
 const NEBULA_TURN_SECONDS = [90, 60] // the nebula is two layers drifting round the sky in opposite directions, one full turn in this long each...
 const NEBULA_PULSE = 0.4           // ...with waves of brightness rolling through them, up to this fraction brighter or darker
+const SPARKLE_SHARE = 0.3          // share of stars (in the background and at constellation corners) that now and then flash bright, then fade almost away and come back...
+const SPARKLE_SECONDS = [4, 10]    // ...once per this many seconds, random per star
+const LINE_FADE_SHARE = 0.2        // each line between a constellation's stars is faded out about this share of the time...
+const LINE_FADE_SECONDS = [4, 9]   // ...once per this many seconds, random per line, so a few lines are always missing but never the same ones for long
 const GLOW_SECONDS = 0.35          // the "fitted" glow eases in and out this slowly instead of snapping on and off
 
 const HELD_COLOR = 0xffd166     // the object the player is fitting
@@ -290,20 +294,57 @@ const nebula = new THREE.Mesh(new THREE.SphereGeometry(90, 64, 32), nebulaMateri
 nebula.renderOrder = -1 // behind everything
 scene.add(nebula)
 
-// Background stars, all around, in three sets that twinkle out of step. Earth hides
-// the ones below the horizon.
-const twinkling = []
-for (let set = 0; set < 3; set++) {
-  const positions = []
-  for (let i = 0; i < 500; i++) positions.push(...new THREE.Vector3().randomDirection().multiplyScalar(60).toArray())
-  const stars = new THREE.Points(
-    new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)),
-    starMaterial(3, 0.7),
-  )
-  stars.userData.phase = set * 2.1
-  scene.add(stars)
-  twinkling.push(stars)
+// Each star's own timing. Every star twinkles gently; SPARKLE_SHARE of them also sparkle.
+const randomIn = ([low, high]) => low + Math.random() * (high - low)
+function starTiming() {
+  return {
+    rate: 0.8 + Math.random() * 1.6,
+    phase: Math.random() * 2 * Math.PI,
+    sparkles: Math.random() < SPARKLE_SHARE,
+    period: randomIn(SPARKLE_SECONDS),
+    offset: Math.random(),
+  }
 }
+
+// A star's brightness at time t (1 = normal). A sparkling star flashes bright, then
+// later fades almost to nothing and comes back, once per period.
+function starBrightness(star, t) {
+  const twinkle = 0.85 + 0.15 * Math.sin(t * star.rate + star.phase)
+  if (!star.sparkles) return twinkle
+  const p = (t / star.period + star.offset) % 1
+  const flash = 1.5 * Math.exp(-p * 30)
+  const gone = THREE.MathUtils.smoothstep(p, 0.5, 0.6) * (1 - THREE.MathUtils.smoothstep(p, 0.8, 0.9))
+  return twinkle * (1 + flash) * (1 - 0.9 * gone)
+}
+
+// Stars drawn with additive blending and a brightness per star, so each one can
+// twinkle, sparkle and fade on its own (black adds nothing, so a faded star is gone).
+const starsMaterial = (size) => new THREE.PointsMaterial({
+  map: dot, size, sizeAttenuation: false, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+})
+function brightnessAttribute(count) {
+  return new THREE.Float32BufferAttribute(new Float32Array(count * 3).fill(1), 3)
+}
+function setStarBrightness(attribute, timings, t, scale) {
+  timings.forEach((star, i) => {
+    const b = scale * starBrightness(star, t)
+    attribute.setXYZ(i, b, b, b)
+  })
+  attribute.needsUpdate = true
+}
+
+// Background stars, all around. Earth hides the ones below the horizon.
+const BACKGROUND_STARS = 1500
+const backgroundPositions = []
+for (let i = 0; i < BACKGROUND_STARS; i++) backgroundPositions.push(...new THREE.Vector3().randomDirection().multiplyScalar(60).toArray())
+const backgroundTimings = Array.from({ length: BACKGROUND_STARS }, starTiming)
+const backgroundStars = new THREE.Points(
+  new THREE.BufferGeometry()
+    .setAttribute('position', new THREE.Float32BufferAttribute(backgroundPositions, 3))
+    .setAttribute('color', brightnessAttribute(BACKGROUND_STARS)),
+  starsMaterial(3),
+)
+scene.add(backgroundStars)
 
 // Earth, directly below the player. Oceans, land and cloud are random blobs drawn
 // onto a canvas; each is repeated across the edges so the texture tiles seamlessly.
@@ -379,7 +420,8 @@ function nearBlue() {
 
 // One line outline and one set of corner stars per object, shared by every copy.
 // Line2 instead of a plain line because WebGL draws plain lines 1px wide. Each corner
-// gets its own shade of blue, blended along the lines, and its own wobble timing.
+// gets its own shade of blue, blended along the lines, its own wobble and sparkle
+// timing, and each line its own fade timing.
 const GEOMETRY = {}
 for (const name in OBJECTS) {
   const points = OBJECTS[name]
@@ -388,30 +430,52 @@ for (const name in OBJECTS) {
     line: new LineGeometry()
       .setPositions([...points, points[0]].flatMap(([x, y]) => [x, y, 0]))
       .setColors([...colors, colors[0]].flatMap((c) => [c.r, c.g, c.b])),
-    stars: new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(points.flatMap(([x, y]) => [x, y, 0]), 3)),
+    stars: new THREE.BufferGeometry()
+      .setAttribute('position', new THREE.Float32BufferAttribute(points.flatMap(([x, y]) => [x, y, 0]), 3))
+      .setAttribute('color', brightnessAttribute(points.length)),
+    colors,
     wobble: points.map(() => [Math.random() * 2 * Math.PI, Math.random() * 2 * Math.PI]),
+    starTimings: points.map(starTiming),
+    lineFades: points.map(() => ({ period: randomIn(LINE_FADE_SECONDS), offset: Math.random() })),
   }
 }
 
-// Move every corner of an object (its lines and its stars) by a pixel or two, smoothly,
-// so a bot's estimate of the outline is never exactly the same twice.
-function wobble(name, t) {
-  const { line, stars, wobble: phases } = GEOMETRY[name]
+// How visible a line is at time t (1 = fully). Each line is mostly there, but once per
+// period it fades nearly out for about LINE_FADE_SHARE of the time, then back.
+const FADE_LEVEL = -Math.cos(Math.PI * LINE_FADE_SHARE) // the line is half faded when its wave dips below this
+function lineVisibility({ period, offset }, t) {
+  const wave = Math.sin(2 * Math.PI * (t / period + offset))
+  return 0.05 + 0.95 * THREE.MathUtils.smoothstep(wave, FADE_LEVEL - 0.15, FADE_LEVEL + 0.15)
+}
+
+// Animate an object's outline: move every corner (its lines and its star) by a pixel
+// or two, smoothly, so a bot's estimate of the outline is never exactly the same twice;
+// fade each line in and out; and twinkle and sparkle the corner stars.
+function animateOutline(name, t) {
+  const { line, stars, colors, wobble: phases, starTimings, lineFades } = GEOMETRY[name]
   const points = OBJECTS[name].map(([x, y], i) => [
     x + JITTER * Math.sin(t * 2.1 + phases[i][0]),
     y + JITTER * Math.sin(t * 2.6 + phases[i][1]),
   ])
-  const segments = line.attributes.instanceStart.data // each line segment's start and end, one after another
+  const segments = line.attributes.instanceStart.data // each segment's start and end positions, one after another
+  const segmentColors = line.attributes.instanceColorStart.data // and its start and end colours, the same way
   points.forEach(([x, y], i) => {
-    const [nx, ny] = points[(i + 1) % points.length]
+    const next = (i + 1) % points.length
+    const [nx, ny] = points[next]
     segments.array.set([x, y, 0, nx, ny, 0], i * 6)
     stars.attributes.position.setXY(i, x, y)
+    // The lines are drawn additively, so scaling a line's colour towards black fades it out.
+    const v = lineVisibility(lineFades[i], t)
+    const [a, b] = [colors[i], colors[next]]
+    segmentColors.array.set([a.r * v, a.g * v, a.b * v, b.r * v, b.g * v, b.b * v], i * 6)
   })
   segments.needsUpdate = true
+  segmentColors.needsUpdate = true
   stars.attributes.position.needsUpdate = true
+  setStarBrightness(stars.attributes.color, starTimings, t, 1)
 }
 
-const constellationStars = starMaterial(9, 1)
+const constellationStars = starsMaterial(9)
 // Constellations the player has tested and found wrong are dimmed, so nobody re-tests one.
 const rejectedLine = new LineMaterial({ color: 0x26344d, linewidth: 2, depthTest: false })
 const rejectedStars = starMaterial(9, 0.25)
@@ -420,7 +484,9 @@ const rejectedStars = starMaterial(9, 0.25)
 // waver on their own timing. The wide, faint second line is a soft glow around it.
 function makeConstellation(name) {
   const group = new THREE.Group()
-  const line = new Line2(GEOMETRY[name].line, new LineMaterial({ linewidth: LINE_WIDTHS[0], vertexColors: true, depthTest: false }))
+  const line = new Line2(GEOMETRY[name].line, new LineMaterial({
+    linewidth: LINE_WIDTHS[0], vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
+  }))
   const glow = new Line2(GEOMETRY[name].line, new LineMaterial({
     linewidth: 8, vertexColors: true, transparent: true, opacity: 0.15, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
   }))
@@ -690,8 +756,7 @@ function loop(now) {
   nebulaMaterial.uniforms.time.value = t
   camera.getWorldDirection(forward)
 
-  for (const stars of twinkling) stars.material.opacity = 0.7 * (0.7 + 0.3 * Math.sin(t * 1.3 + stars.userData.phase))
-  constellationStars.opacity = 0.85 + 0.15 * Math.sin(t * 2.3)
+  setStarBrightness(backgroundStars.geometry.attributes.color, backgroundTimings, t, 0.7)
 
   // Spin every constellation in place, the answer too while the player turns the
   // dial, so fitting it means tracking a moving shape. Only a locked answer stops,
@@ -699,7 +764,7 @@ function loop(now) {
   for (const c of sky) {
     if (c !== target || phase === 'search' || phase === 'rotate') c.rotateZ(c.userData.spin * dt)
     if (!rejected.has(c)) shimmer(c, t)
-    wobble(c.userData.name, t)
+    animateOutline(c.userData.name, t)
   }
 
   if (phase === 'search') {
