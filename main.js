@@ -494,10 +494,11 @@ function loop(now) {
   earthMaterial.uniforms.drift.value = now * 0.000002
   camera.getWorldDirection(forward)
 
-  // Spin every constellation in place. The answer stops once it's found, so the
-  // player fits the dial to a still shape rather than chasing a moving one.
+  // Spin every constellation in place, the answer too while the player turns the
+  // dial, so fitting it means tracking a moving shape. Only a locked answer stops,
+  // so the match stays lined up on screen.
   for (const c of sky) {
-    if (c !== target || phase === 'search') c.rotateZ(c.userData.spin * dt * 2 * Math.PI / SPIN_SECONDS)
+    if (c !== target || phase === 'search' || phase === 'rotate') c.rotateZ(c.userData.spin * dt * 2 * Math.PI / SPIN_SECONDS)
   }
 
   if (phase === 'search') {
