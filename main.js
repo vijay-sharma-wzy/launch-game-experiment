@@ -23,7 +23,6 @@ const POS_TOLERANCE = 0.8 * DEG // how close the constellation must be to screen
 const TILT_TOLERANCE = 3 * DEG  // how well the rotation must match to lock
 const MIN_SEPARATION = 30 * DEG // smallest angle between two constellations, so they never overlap
 const SKY_ELEVATION = [15 * DEG, 75 * DEG] // constellations sit all the way round the player, between these heights above the horizon; never below
-const MAX_PITCH = 85 * DEG      // how far up the view can tilt; just short of straight up, where left/right stops meaning anything
 const START_ELEVATION = 8 * DEG // where the player looks at the start: just above the horizon, with Earth in view
 const HORIZON_DIP = 5 * DEG     // how far below eye level Earth's horizon sits
 const TURN_PER_PIXEL = 0.5 * DEG  // rotation per pixel dragged on the dial; geared down for fine control
@@ -151,15 +150,9 @@ function resize() {
 addEventListener('resize', resize)
 resize()
 
-// The view is a yaw (left/right) and a pitch (up from the horizon). No roll, so
-// "up" on screen always points away from Earth and the player stays oriented.
-let yaw = 0
-let pitch = START_ELEVATION
-
-function applyView() {
-  camera.rotation.set(pitch, yaw, 0, 'YXZ')
-}
-applyView()
+// The view is a free rotation rather than separate left/right and up/down angles, so
+// it can pass straight overhead without getting stuck (see the drag handler below).
+camera.rotation.set(START_ELEVATION, 0, 0, 'YXZ')
 
 // The direction the camera faces for a given yaw and pitch.
 function direction(yaw, pitch) {
@@ -294,7 +287,6 @@ let round = 0
 let startTime
 let sky = []        // this round's constellations
 let target          // the one that answers the prompt
-let targetRoll      // how it is rolled, as seen when centred on screen
 let rejected        // the ones the player has tested and found wrong
 let hovered         // the one under the ring right now
 let progress = 0    // 0..1, how full the ring is
@@ -350,9 +342,7 @@ function startRound() {
     constellation.position.copy(d).multiplyScalar(DISTANCE)
     // Face the player, upright as seen when centred on screen, then roll at random.
     constellation.rotation.set(Math.asin(d.y), Math.atan2(-d.x, -d.z), 0, 'YXZ')
-    const roll = Math.random() * 2 * Math.PI
-    constellation.rotateZ(roll)
-    if (i === 0) targetRoll = roll
+    constellation.rotateZ(Math.random() * 2 * Math.PI)
     scene.add(constellation)
     return constellation
   })
@@ -376,9 +366,11 @@ function reject(constellation) {
 }
 
 // A full ring on the right one: its object fades in, turned away from the
-// constellation by this round's amount, and the dial appears to rotate it.
+// constellation by this round's amount, and the dial appears to rotate it. The
+// amount is measured from how the constellation looks on screen right now, so a
+// tilted view never makes anyone's turn longer or shorter.
 function reveal() {
-  turn = targetRoll + rounds[round - 1].rotate
+  turn = rounds[round - 1].rotate - apparentTilt()
   held.geometry = target.children[0].geometry
   held.material.opacity = 0
   held.visible = true
@@ -407,13 +399,47 @@ function onDrag(element, handler) {
   element.addEventListener('pointercancel', end)
 }
 
-// Drag the sky: it follows the finger. Dividing by cos(pitch) keeps that true
-// high in the sky, so the same pan takes the same drag wherever the target is.
+// Drag the sky: it follows the finger in every direction, anywhere in the dome.
+// Each drag turns the view about its own screen axes, which works the same
+// overhead as at the horizon; separate left/right and up/down angles would jam
+// straight up, where left/right stops meaning anything.
+const X_AXIS = new THREE.Vector3(1, 0, 0)
+const Y_AXIS = new THREE.Vector3(0, 1, 0)
+const ORIGIN = new THREE.Vector3()
+const step = new THREE.Quaternion()
+const level = new THREE.Quaternion()
+const lookMatrix = new THREE.Matrix4()
+const looking = new THREE.Vector3()
+const lookDirection = () => looking.set(0, 0, -1).applyQuaternion(camera.quaternion)
+
+const screenUp = new THREE.Vector3()
+
+// The view must stay above the horizon (Earth is down there) and must not tip over
+// backwards past straight up, which would leave the player upside down. Looking
+// straight up is fine.
+const inDome = () => lookDirection().y >= 0 && screenUp.set(0, 1, 0).applyQuaternion(camera.quaternion).y >= -1e-9
+
+// Turn the view. If the full turn would leave the dome, take the biggest half,
+// quarter, ... of it that doesn't, so the view slides right up to the edge.
+function turnView(axis, angle) {
+  const before = camera.quaternion.clone()
+  for (let i = 0; i < 10; i++, angle /= 2) {
+    camera.quaternion.copy(before).multiply(step.setFromAxisAngle(axis, angle))
+    if (inDome()) return
+  }
+  camera.quaternion.copy(before)
+}
+
 onDrag(renderer.domElement, (dx, dy) => {
   const perPixel = camera.fov * DEG / innerHeight
-  pitch = THREE.MathUtils.clamp(pitch + dy * perPixel, 0, MAX_PITCH)
-  yaw += dx * perPixel / Math.cos(pitch) // no limit: the player can turn all the way round
-  applyView()
+  turnView(Y_AXIS, dx * perPixel) // no limit: the player can turn all the way round
+  turnView(X_AXIS, dy * perPixel)
+  // Free turning lets the view tilt sideways. Straighten it fully near the horizon,
+  // so Earth stays at the bottom of the screen and the player stays oriented, and
+  // less and less higher up, so nothing fights the finger near the top.
+  const d = lookDirection()
+  level.setFromRotationMatrix(lookMatrix.lookAt(ORIGIN, d, Y_AXIS))
+  camera.quaternion.slerp(level, (1 - d.y ** 2) ** 2)
 })
 
 // Drag the dial (or scroll the mouse wheel) to rotate the held object.
@@ -423,12 +449,17 @@ addEventListener('wheel', (e) => {
 }, { passive: true })
 
 // ---- Lock ----------------------------------------------------------------------
-function isMatched() {
-  // Tilt: angle between the target's "up" and the held object's "up", in camera
-  // space. The objects have no rotational symmetry, so only one rotation matches.
+// How far the target's "up" is turned from the screen's "up", seen from the camera.
+function apparentTilt() {
   const up = new THREE.Vector3(0, 1, 0).applyQuaternion(target.quaternion)
   up.applyQuaternion(camera.quaternion.clone().invert())
-  const off = Math.atan2(up.x, up.y) + turn
+  return Math.atan2(up.x, up.y)
+}
+
+// Tilt: does the held object's rotation cancel the target's apparent tilt? The
+// objects have no rotational symmetry, so only one rotation matches.
+function isMatched() {
+  const off = apparentTilt() + turn
   return Math.abs(Math.atan2(Math.sin(off), Math.cos(off))) < TILT_TOLERANCE
 }
 
