@@ -45,14 +45,14 @@ This repo is only about what **the game itself** can do to filter bots and rank 
 
 Logic that will later run on the server (issuing sessions, timing rounds on the server's clock, validating and storing scores) should live in clearly separated client-side code that mimics a server, so it can be lifted into Lambda later. Do not trust or depend on it as real security; it is a stand-in.
 
-Current state: no server simulation exists yet. The score is just the local time from the Start tap to the last lock (`elapsed()` and `lock()` in `main.js`).
+Current state: no server simulation exists yet. The score is just the local time from the Start tap to the last lock, plus wrong-pick penalties (`elapsed()` and `lock()` in `main.js`).
 
 ## Game design
 
 The player floats in space with Earth directly below. Constellations (outlines of objects) are scattered all the way round the player and overhead, never below, and each one slowly spins in place. The player drags the sky freely anywhere in the dome, up to straight overhead. A ring marks the centre of the screen. A game is 3 rounds, and in each round thinking and moving happen together rather than in separate steps:
 
 1. **Find.** A random prompt ("Find the object that melts in the sun") appears and the player can drag the sky straight away. Exactly one constellation answers the prompt. The outlines carry no name labels, in the page or the markup: recognising them is part of the task.
-2. **Hold.** Holding the ring on a constellation fills it. A full ring on a wrong constellation flashes red and dims that constellation; there is no explicit penalty, because the time the hold took is the penalty. A full ring on the right one fades the object in at the centre of the screen, turned away from its constellation.
+2. **Hold.** Holding the ring on a constellation fills it. A full ring on a wrong constellation flashes red, dims that constellation and adds a 5-second penalty to the score, shown as "+5s" beside the timer (which always includes penalties). The DONE screen says how much of the score was penalties. A full ring on the right one fades the object in at the centre of the screen, turned away from its constellation.
 3. **Lock.** The player rotates the object with the dial to match the constellation, which keeps spinning. A small dot on the object's centre and a bigger one on the constellation's (shown only once it's found) guide the position. While position and rotation are both within a tight tolerance the ring fills and a soft glow eases in; when either slips it pauses, but never drains, so matched time adds up. There is deliberately no colour switch for "fitted", which a bot could read from one pixel. A full ring locks the round. The hold means the player has to track the spin with the dial: waiting for the constellation to come round to the object only adds a moment per turn.
 
 The score is the total time. Rules that keep it fair:

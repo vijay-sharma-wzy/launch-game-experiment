@@ -35,6 +35,7 @@ const HORIZON_DIP = 5 * DEG     // how far below eye level Earth's horizon sits
 const TURN_PER_PIXEL = 0.5 * DEG  // rotation per pixel dragged on the dial; geared down for fine control
 const TURN_PER_WHEEL = 0.03 * DEG // rotation per unit of mouse wheel, so desktop players can pan and rotate at once; one notch must not jump the tolerance
 const LOCK_PAUSE = 600          // ms the matched object stays on screen before the next round
+const WRONG_PENALTY = 5         // seconds added to the score for each wrong constellation tested, so guessing costs far more than thinking (the Start page states it too)
 const HELD_DOT_SIZE = 8         // pixels; the dot at the held object's centre...
 const TARGET_DOT_SIZE = 18      // ...sits inside the answer's bigger centre dot when the position is about right
 
@@ -530,6 +531,7 @@ const rounds = planRounds()
 let phase = 'start' // 'start' -> ('search' -> 'rotate' -> 'locked') per round -> 'done'
 let round = 0
 let startTime
+let penalty = 0     // seconds added for wrong picks so far
 let sky = []        // this round's constellations
 let target          // the one that answers the prompt
 let rejected        // the ones the player has tested and found wrong
@@ -538,10 +540,13 @@ let progress = 0    // 0..1, how full the ring is
 let turn = 0        // rotation of the held object, anticlockwise, in radians
 let glow = 0        // 0..1, how strongly the ring glows while the object is fitted
 
-const elapsed = () => (performance.now() - startTime) / 1000
+// The score so far: time since Start plus any penalties, so the timer on screen
+// always shows exactly what the player's score would be.
+const elapsed = () => (performance.now() - startTime) / 1000 + penalty
 
 const roundEl = document.getElementById('round')
 const timerEl = document.getElementById('timer')
+const penaltyEl = document.getElementById('penalty')
 const promptEl = document.getElementById('prompt')
 const ringEl = document.getElementById('ring')
 const fillEl = document.getElementById('fill')
@@ -609,16 +614,25 @@ function startRound() {
   phase = 'search'
 }
 
-// A full ring on the wrong constellation. No penalty beyond the time the hold
-// took, but say "no" clearly so it doesn't look like the game missed the hold.
+// Replays a CSS animation class, even if it's already playing.
+function flash(element, className) {
+  element.classList.remove(className)
+  element.getBoundingClientRect()
+  element.classList.add(className)
+}
+
+// A full ring on the wrong constellation costs WRONG_PENALTY seconds. Say "no"
+// clearly, and show the penalty next to the timer as it jumps, so neither looks
+// like a glitch.
 function reject(constellation) {
   rejected.add(constellation)
   constellation.children[0].material = rejectedLine
   constellation.children[1].material = rejectedStars
   constellation.children[2].visible = false // no glow
-  ringEl.classList.remove('wrong')
-  ringEl.getBoundingClientRect() // restart the animation if it's already playing
-  ringEl.classList.add('wrong')
+  penalty += WRONG_PENALTY
+  penaltyEl.textContent = `+${WRONG_PENALTY}s`
+  flash(ringEl, 'wrong')
+  flash(penaltyEl, 'show')
 }
 
 // A full ring on the right one: its object fades in, turned away from the
@@ -740,6 +754,8 @@ function lock() {
     dialEl.style.display = 'none'
     promptEl.textContent = ''
     document.getElementById('score').textContent = `${seconds.toFixed(2)}s`
+    const wrong = penalty / WRONG_PENALTY
+    if (wrong) document.getElementById('penalties').textContent = `Includes +${penalty}s for ${wrong} wrong ${wrong === 1 ? 'pick' : 'picks'}`
     document.getElementById('done').style.display = 'flex'
   }, LOCK_PAUSE)
 }

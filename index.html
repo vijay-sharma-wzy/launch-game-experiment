@@ -24,6 +24,12 @@
     #start { background: rgba(2, 4, 10, 0.6); }
     #done { background: rgba(2, 4, 10, 0.8); display: none; }
     #score { font-size: 40px; font-variant-numeric: tabular-nums; }
+    #penalties:empty { display: none; }
+
+    /* "+5s" next to the timer when a wrong pick adds a penalty: shown briefly, then fades */
+    #penalty { margin-right: 8px; color: #ff5d5d; font-weight: 600; opacity: 0; }
+    #penalty.show { animation: penalty 1.6s ease-out; }
+    @keyframes penalty { 0%, 60% { opacity: 1; } 100% { opacity: 0; } }
 
     /* HUD: round and running time, so the player always knows where they are */
     #hud {
@@ -58,7 +64,7 @@
 </head>
 <body>
   <!-- HUD: filled in by main.js -->
-  <div id="hud"><span id="round"></span><span id="timer"></span></div>
+  <div id="hud"><span id="round"></span><span><span id="penalty"></span><span id="timer"></span></span></div>
 
   <div id="prompt"></div>
 
@@ -74,7 +80,7 @@
   <!-- Start page. The clock starts on the tap. -->
   <div id="start" class="overlay">
     <h1>LAUNCH</h1>
-    <p>Drag the sky to find the constellation that answers the prompt, and hold the ring on it. Then rotate the object to fit, and keep it fitted while the ring fills. Fastest time wins.</p>
+    <p>Drag the sky to find the constellation that answers the prompt, and hold the ring on it. Then rotate the object to fit, and keep it fitted while the ring fills. Each wrong pick adds 5 seconds. Fastest time wins.</p>
     <button class="primary">Start</button>
   </div>
 
@@ -82,6 +88,7 @@
   <div id="done" class="overlay">
     <h1>DONE</h1>
     <div id="score"></div>
+    <p id="penalties"></p>
     <button class="primary">Play again</button>
   </div>
 
