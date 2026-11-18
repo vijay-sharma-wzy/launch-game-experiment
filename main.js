@@ -2,6 +2,8 @@ import * as THREE from 'three'
 import { Line2 } from 'three/addons/lines/Line2.js'
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js'
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
 
 // ---- Tunables ----------------------------------------------------------------
 const DEG = Math.PI / 180
@@ -38,8 +40,19 @@ const LOCK_PAUSE = 600          // ms the matched object stays on screen before 
 const HELD_DOT_SIZE = 8         // pixels; the dot at the held object's centre...
 const TARGET_DOT_SIZE = 18      // ...sits inside the answer's bigger centre dot when the position is about right
 
+// Visual noise. None of it changes the shape a human sees, but it breaks the shortcuts
+// a screen-reading bot relies on: one fixed colour, a plain background, clean
+// outlines, and an instant on/off signal for "fitted".
+const LINE_HUE_SPREAD = 0.04       // each corner's line colour drifts this far either side of the base blue (1 = the whole colour wheel)...
+const LINE_LIGHTNESS_SPREAD = 0.12 // ...and this much lighter or darker, so a single colour threshold misses parts of the outline
+const SHIMMER = 0.2                // each constellation's brightness wavers by up to this fraction, out of step with the others
+const LINE_WIDTHS = [1.5, 2.8]     // pixels; each outline's thickness wavers between these
+const JITTER = 0.015               // how far each corner wanders, as a fraction of an object's half-size (about 1–2 px on a phone)
+const DECOY_STROKES = 30           // faint stray lines between stars each round, so a shape detector finds pieces that belong to nothing
+const DECOY_CLEARANCE = 16 * DEG   // decoys stay this far from every constellation's centre, so a human never reads one as part of an outline
+const GLOW_SECONDS = 0.35          // the "fitted" glow eases in and out this slowly instead of snapping on and off
+
 const HELD_COLOR = 0xffd166     // the object the player is fitting
-const ON_TARGET_COLOR = 0xffffff // position is right, rotation still to do
 const LOCKED_COLOR = 0x4dff88
 
 // ---- Objects and prompts -----------------------------------------------------
@@ -187,13 +200,80 @@ const dot = dotTexture()
 const starMaterial = (size, opacity) =>
   new THREE.PointsMaterial({ map: dot, size, sizeAttenuation: false, transparent: true, opacity, depthWrite: false })
 
-// Background stars, all around. Earth hides the ones below the horizon.
-const backgroundStars = []
-for (let i = 0; i < 1500; i++) backgroundStars.push(...new THREE.Vector3().randomDirection().multiplyScalar(60).toArray())
-scene.add(new THREE.Points(
-  new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(backgroundStars, 3)),
-  starMaterial(3, 0.7),
-))
+// A faint nebula and Milky Way band in the same blues as the constellations, so a
+// bot can't find the outlines just by looking for blue pixels next to dark ones.
+// It's painted on the inside of a big sphere. The band and clouds keep away from the
+// top of the map, which pinches together straight overhead.
+// The pixels are worked out here rather than drawn with canvas gradients, because
+// browsers dither gradients in a regular pattern that shows as a grid once stretched
+// over the sky.
+function nebulaTexture() {
+  const w = 1024
+  const h = 512
+  const light = new Float32Array(w * h * 3)
+  // Adds a soft round cloud of colour, wrapping round the left/right edge so the seam doesn't show.
+  const blob = (x, y, r, rgb, alpha) => {
+    for (let py = Math.max(0, Math.floor(y - r)); py < Math.min(h, y + r); py++) {
+      for (let dx = -Math.ceil(r); dx <= r; dx++) {
+        const d2 = (dx * dx + (py - y) ** 2) / (r * r)
+        if (d2 >= 1) continue
+        const a = alpha * (1 - d2) ** 2
+        const i = (py * w + ((Math.round(x) + dx) % w + w) % w) * 3
+        for (let c = 0; c < 3; c++) light[i + c] += rgb[c] * a
+      }
+    }
+  }
+  // The Milky Way: a tilted great circle round the sky, which is a wave on this map.
+  const tilt = (25 + Math.random() * 20) * DEG
+  const shift = Math.random() * 2 * Math.PI
+  for (let i = 0; i < 600; i++) {
+    const x = Math.random() * w
+    const latitude = Math.atan(Math.tan(tilt) * Math.sin(x / w * 2 * Math.PI + shift))
+    const y = (0.5 - latitude / Math.PI) * h + (Math.random() - 0.5) * h * 0.07
+    blob(x, y, 8 + Math.random() * 22, [110, 168, 255], 0.02 + Math.random() * 0.03)
+  }
+  // Nebula clouds, between about 55° up and the horizon.
+  for (let i = 0; i < 35; i++) {
+    const rgb = [[110, 168, 255], [80, 110, 220], [150, 120, 255]][i % 3]
+    blob(Math.random() * w, h * (0.2 + Math.random() * 0.32), 30 + Math.random() * 80, rgb, 0.03 + Math.random() * 0.05)
+  }
+  // Onto a dark sky, with a little random noise when rounding so no banding or pattern shows.
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  const image = ctx.createImageData(w, h)
+  const base = [2, 4, 10]
+  for (let p = 0; p < w * h; p++) {
+    for (let c = 0; c < 3; c++) image.data[p * 4 + c] = base[c] + light[p * 3 + c] + Math.random() - 0.5
+    image.data[p * 4 + 3] = 255
+  }
+  ctx.putImageData(image, 0, 0)
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  return texture
+}
+const nebula = new THREE.Mesh(
+  new THREE.SphereGeometry(90, 64, 32),
+  new THREE.MeshBasicMaterial({ map: nebulaTexture(), side: THREE.BackSide, depthWrite: false }),
+)
+nebula.renderOrder = -1 // behind everything
+scene.add(nebula)
+
+// Background stars, all around, in three sets that twinkle out of step. Earth hides
+// the ones below the horizon.
+const twinkling = []
+for (let set = 0; set < 3; set++) {
+  const positions = []
+  for (let i = 0; i < 500; i++) positions.push(...new THREE.Vector3().randomDirection().multiplyScalar(60).toArray())
+  const stars = new THREE.Points(
+    new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)),
+    starMaterial(3, 0.7),
+  )
+  stars.userData.phase = set * 2.1
+  scene.add(stars)
+  twinkling.push(stars)
+}
 
 // Earth, directly below the player. Oceans, land and cloud are random blobs drawn
 // onto a canvas; each is repeated across the edges so the texture tiles seamlessly.
@@ -259,27 +339,110 @@ const earth = new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS, 128, 16, 0, 
 earth.position.y = -EARTH_RADIUS / Math.cos(HORIZON_DIP) // puts the horizon HORIZON_DIP below eye level
 scene.add(earth)
 
+// A blue near the constellation blue, shifted a little in hue and lightness, so the
+// outline is never one exact colour.
+const BASE_BLUE = new THREE.Color(0x6ea8ff).getHSL({})
+function nearBlue() {
+  const spread = (amount) => (Math.random() * 2 - 1) * amount
+  return new THREE.Color().setHSL(BASE_BLUE.h + spread(LINE_HUE_SPREAD), BASE_BLUE.s, BASE_BLUE.l + spread(LINE_LIGHTNESS_SPREAD))
+}
+
 // One line outline and one set of corner stars per object, shared by every copy.
-// Line2 instead of a plain line because WebGL draws plain lines 1px wide.
+// Line2 instead of a plain line because WebGL draws plain lines 1px wide. Each corner
+// gets its own shade of blue, blended along the lines, and its own wobble timing.
 const GEOMETRY = {}
 for (const name in OBJECTS) {
   const points = OBJECTS[name]
+  const colors = points.map(nearBlue)
   GEOMETRY[name] = {
-    line: new LineGeometry().setPositions([...points, points[0]].flatMap(([x, y]) => [x, y, 0])),
+    line: new LineGeometry()
+      .setPositions([...points, points[0]].flatMap(([x, y]) => [x, y, 0]))
+      .setColors([...colors, colors[0]].flatMap((c) => [c.r, c.g, c.b])),
     stars: new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(points.flatMap(([x, y]) => [x, y, 0]), 3)),
+    wobble: points.map(() => [Math.random() * 2 * Math.PI, Math.random() * 2 * Math.PI]),
   }
 }
-const constellationLine = new LineMaterial({ color: 0x6ea8ff, linewidth: 2, depthTest: false })
+
+// Move every corner of an object (its lines and its stars) by a pixel or two, smoothly,
+// so a bot's estimate of the outline is never exactly the same twice.
+function wobble(name, t) {
+  const { line, stars, wobble: phases } = GEOMETRY[name]
+  const points = OBJECTS[name].map(([x, y], i) => [
+    x + JITTER * Math.sin(t * 2.1 + phases[i][0]),
+    y + JITTER * Math.sin(t * 2.6 + phases[i][1]),
+  ])
+  const segments = line.attributes.instanceStart.data // each line segment's start and end, one after another
+  points.forEach(([x, y], i) => {
+    const [nx, ny] = points[(i + 1) % points.length]
+    segments.array.set([x, y, 0, nx, ny, 0], i * 6)
+    stars.attributes.position.setXY(i, x, y)
+  })
+  segments.needsUpdate = true
+  stars.attributes.position.needsUpdate = true
+}
+
 const constellationStars = starMaterial(9, 1)
 // Constellations the player has tested and found wrong are dimmed, so nobody re-tests one.
 const rejectedLine = new LineMaterial({ color: 0x26344d, linewidth: 2, depthTest: false })
 const rejectedStars = starMaterial(9, 0.25)
 
+// Each constellation has its own line materials, so its brightness and thickness can
+// waver on their own timing. The wide, faint second line is a soft glow around it.
 function makeConstellation(name) {
   const group = new THREE.Group()
-  group.add(new Line2(GEOMETRY[name].line, constellationLine), new THREE.Points(GEOMETRY[name].stars, constellationStars))
+  const line = new Line2(GEOMETRY[name].line, new LineMaterial({ linewidth: LINE_WIDTHS[0], vertexColors: true, depthTest: false }))
+  const glow = new Line2(GEOMETRY[name].line, new LineMaterial({
+    linewidth: 8, vertexColors: true, transparent: true, opacity: 0.15, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
+  }))
+  group.add(line, new THREE.Points(GEOMETRY[name].stars, constellationStars), glow)
+  group.userData.name = name
+  group.userData.phase = Math.random() * 100
   group.scale.setScalar(SIZE)
   return group
+}
+
+// Waver a constellation's brightness and line thickness.
+function shimmer(constellation, t) {
+  const [line] = constellation.children
+  const phase = constellation.userData.phase
+  line.material.color.setScalar(1 + SHIMMER * Math.sin(t * 1.7 + phase))
+  line.material.linewidth = LINE_WIDTHS[0] + (LINE_WIDTHS[1] - LINE_WIDTHS[0]) * (0.5 + 0.5 * Math.sin(t * 1.1 + phase * 1.3))
+}
+
+// Faint stray strokes between stars: short chains that look like scraps of
+// constellations. A human reads them as background next to the bright outlines, but a
+// shape detector picks them up as more candidates. New ones every round, kept clear
+// of the real constellations so they never look like part of one.
+const decoyLine = new LineMaterial({ color: 0x6ea8ff, linewidth: 1.5, transparent: true, opacity: 0.35, depthTest: false })
+const decoyStars = starMaterial(5, 0.6)
+const decoys = new THREE.Group()
+scene.add(decoys)
+
+function scatterDecoys() {
+  for (const child of decoys.children) child.geometry.dispose()
+  decoys.clear()
+  const clear = (d) => d.y > Math.sin(3 * DEG) && sky.every((c) => c.position.angleTo(d) >= DECOY_CLEARANCE)
+  const toSky = (d) => d.clone().multiplyScalar(DISTANCE).toArray()
+  const segments = []
+  const stars = []
+  for (let strokes = 0; strokes < DECOY_STROKES;) {
+    let from = new THREE.Vector3().randomDirection()
+    if (!clear(from)) continue
+    stars.push(...toSky(from))
+    for (let links = 1 + Math.floor(Math.random() * 3); links > 0 && strokes < DECOY_STROKES; links--) {
+      const axis = new THREE.Vector3().randomDirection().cross(from).normalize()
+      const to = from.clone().applyAxisAngle(axis, (3 + Math.random() * 6) * DEG)
+      if (!clear(to)) break
+      segments.push(...toSky(from), ...toSky(to))
+      stars.push(...toSky(to))
+      from = to
+      strokes++
+    }
+  }
+  decoys.add(
+    new LineSegments2(new LineSegmentsGeometry().setPositions(segments), decoyLine),
+    new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(stars, 3)), decoyStars),
+  )
 }
 
 // The object the player has found, pinned to the centre of the screen. It sits at
@@ -313,6 +476,7 @@ let rejected        // the ones the player has tested and found wrong
 let hovered         // the one under the ring right now
 let progress = 0    // 0..1, how full the ring is
 let turn = 0        // rotation of the held object, anticlockwise, in radians
+let glow = 0        // 0..1, how strongly the ring glows while the object is fitted
 
 const elapsed = () => (performance.now() - startTime) / 1000
 
@@ -378,6 +542,7 @@ function startRound() {
     return constellation
   })
   target = sky[0]
+  scatterDecoys()
   rejected = new Set()
   hovered = undefined
   progress = 0
@@ -391,6 +556,7 @@ function reject(constellation) {
   rejected.add(constellation)
   constellation.children[0].material = rejectedLine
   constellation.children[1].material = rejectedStars
+  constellation.children[2].visible = false // no glow
   ringEl.classList.remove('wrong')
   ringEl.getBoundingClientRect() // restart the animation if it's already playing
   ringEl.classList.add('wrong')
@@ -405,8 +571,10 @@ function reveal() {
   held.geometry = target.children[0].geometry
   target.add(targetDot) // moves it off last round's answer
   held.material.opacity = 0
+  held.material.color.set(HELD_COLOR)
   held.visible = true
   progress = 0 // the ring now shows the lock hold
+  glow = 0
   ringEl.classList.remove('wrong')
   dialEl.style.display = 'flex'
   phase = 'rotate'
@@ -500,7 +668,7 @@ function lock() {
   held.material.opacity = 1
   held.material.color.set(LOCKED_COLOR)
   ringEl.style.display = 'none'
-  ringEl.classList.remove('holding', 'slipping')
+  ringEl.style.filter = ''
   if (round < ROUNDS) {
     phase = 'locked'
     return setTimeout(startRound, LOCK_PAUSE)
@@ -524,14 +692,20 @@ let lastTime = 0
 function loop(now) {
   const dt = (now - lastTime) / 1000
   lastTime = now
+  const t = now / 1000
   earthMaterial.uniforms.drift.value = now * 0.000002
   camera.getWorldDirection(forward)
+
+  for (const stars of twinkling) stars.material.opacity = 0.7 * (0.7 + 0.3 * Math.sin(t * 1.3 + stars.userData.phase))
+  constellationStars.opacity = 0.85 + 0.15 * Math.sin(t * 2.3)
 
   // Spin every constellation in place, the answer too while the player turns the
   // dial, so fitting it means tracking a moving shape. Only a locked answer stops,
   // so the match stays lined up on screen.
   for (const c of sky) {
     if (c !== target || phase === 'search' || phase === 'rotate') c.rotateZ(c.userData.spin * dt)
+    if (!rejected.has(c)) shimmer(c, t)
+    wobble(c.userData.name, t)
   }
 
   if (phase === 'search') {
@@ -551,15 +725,15 @@ function loop(now) {
     held.material.opacity = Math.min(1, held.material.opacity + dt / FADE_SECONDS)
     held.rotation.z = turn
     dialEl.style.backgroundPositionX = `${-turn / TURN_PER_PIXEL}px` // the tick marks slide with the rotation
-    // The lock ring fills green while position and rotation are both right, and turns
-    // red and pauses when either slips. It never drains: time spent matched adds up,
-    // so a slip costs only the time it takes to get back on. A full ring locks the round.
-    const onTarget = forward.angleTo(target.position) < POS_TOLERANCE
-    held.material.color.set(onTarget ? ON_TARGET_COLOR : HELD_COLOR)
-    const matched = onTarget && isMatched()
+    // The lock ring fills while position and rotation are both right and pauses when
+    // either slips. It never drains: time spent matched adds up, so a slip costs only
+    // the time it takes to get back on. A full ring locks the round. There's no colour
+    // switch for "fitted", which a bot could read from a single pixel: a soft glow
+    // eases in and out instead, and the filling ring itself is the main sign.
+    const matched = forward.angleTo(target.position) < POS_TOLERANCE && isMatched()
     if (matched) progress = Math.min(1, progress + dt / LOCK_SECONDS)
-    ringEl.classList.toggle('holding', matched)
-    ringEl.classList.toggle('slipping', !matched)
+    glow += ((matched ? 1 : 0) - glow) * Math.min(1, dt / GLOW_SECONDS)
+    ringEl.style.filter = `drop-shadow(0 0 ${(12 * glow).toFixed(1)}px rgba(255, 209, 102, ${(0.8 * glow).toFixed(2)}))`
     fillEl.style.strokeDashoffset = RING_LENGTH * (1 - progress)
     if (progress >= 1) lock()
   }

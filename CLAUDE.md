@@ -53,13 +53,15 @@ The player floats in space with Earth directly below. Constellations (outlines o
 
 1. **Find.** A random prompt ("Find the object that melts in the sun") appears and the player can drag the sky straight away. Exactly one constellation answers the prompt. The outlines carry no name labels, in the page or the markup: recognising them is part of the task.
 2. **Hold.** Holding the ring on a constellation fills it. A full ring on a wrong constellation flashes red and dims that constellation; there is no explicit penalty, because the time the hold took is the penalty. A full ring on the right one fades the object in at the centre of the screen, turned away from its constellation.
-3. **Lock.** The player rotates the object with the dial to match the constellation, which keeps spinning. A small dot on the object's centre and a bigger one on the constellation's (shown only once it's found) guide the position. While position and rotation are both within a tight tolerance the ring fills green; when either slips it turns red and pauses, but never drains, so matched time adds up. A full ring locks the round. The hold means the player has to track the spin with the dial: waiting for the constellation to come round to the object only adds a moment per turn.
+3. **Lock.** The player rotates the object with the dial to match the constellation, which keeps spinning. A small dot on the object's centre and a bigger one on the constellation's (shown only once it's found) guide the position. While position and rotation are both within a tight tolerance the ring fills and a soft glow eases in; when either slips it pauses, but never drains, so matched time adds up. There is deliberately no colour switch for "fitted", which a bot could read from one pixel. A full ring locks the round. The hold means the player has to track the spin with the dial: waiting for the constellation to come round to the object only adds a moment per turn.
 
 The score is the total time. Rules that keep it fair:
 
 - Prompts, objects, positions and rotations are randomised per player, but the **amount** of work is fixed: every round the answer is the same angular distance from where the player is looking, and every player gets the same set of rotation amounts in a random order and direction. Constellations spin at different speeds, half clockwise and half anticlockwise. The answer's speed comes from a fixed set (one per round, shuffled per player), and it always spins away from the match, so the spin never shortens one player's rotation and lengthens another's.
 - Objects that are arguable for a prompt (`maybe` in `PROMPTS`) are never in the sky with it.
 - The field of view is fixed along the screen's longer side, so phones and desktops see the same amount of sky.
+
+Visual noise makes a screen-reading bot's job harder without changing what a human sees: every outline is drawn in slightly varying blues whose brightness and thickness waver over time, corners wobble by a pixel or two, stars twinkle, a faint nebula and Milky Way band sit behind everything in similar blues, and faint decoy strokes between stray stars (new each round, kept clear of the constellations) give a shape detector extra pieces that belong to nothing.
 
 ## Stack and layout
 
