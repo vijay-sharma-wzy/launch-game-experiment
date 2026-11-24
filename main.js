@@ -49,11 +49,9 @@ const LINE_WIDTHS = [1.5, 2.8]     // pixels; each outline's thickness wavers be
 const JITTER = 0.015               // how far each corner wanders, as a fraction of an object's half-size (about 1–2 px on a phone)
 const NEBULA_TURN_SECONDS = [90, 60] // the nebula is two layers drifting round the sky in opposite directions, one full turn in this long each...
 const NEBULA_PULSE = 0.4           // ...with waves of brightness rolling through them, up to this fraction brighter or darker
-const WISPS = 30                   // dark dust wisps drifting just in front of the constellations, dimming patches of their lines as they pass...
-const WISP_DIM = 0.5               // ...by up to this fraction, so a line is never hidden completely...
-const WISP_TURN_SECONDS = 150      // ...going once round the sky in this long
-const BREATH = 0.06                // each outline slowly stretches and squashes by up to this fraction along its own width and height, so a fixed template never quite fits...
-const BREATH_SECONDS = [3, 6]      // ...once per this many seconds, random per constellation and per axis
+const WISPS = 50                   // dark dust wisps drifting just in front of the constellations, dimming patches of their lines as they pass...
+const WISP_DIM = 0.75              // ...by up to this fraction, so a line is never hidden completely...
+const WISP_TURN_SECONDS = 100      // ...going once round the sky in this long
 const STAR_CYCLE_SECONDS = [4, 12] // every star (in the background and at constellation corners) twinkles, and once per this many seconds, random per star, flares up, later dims out completely, and comes back
 const STAR_SWELL = 0.5             // a star's size grows with its brightness (size = normal size × brightness ^ this), so it swells as it flares (about 1.5× at the peak) and shrinks to nothing as it dims out
 const LINE_FADE_SHARE = 0.2        // each line between a constellation's stars is faded out about this share of the time...
@@ -316,7 +314,7 @@ const wispTexture = () => skyTexture((blob, w, h) => {
     let x = Math.random() * w
     let y = latitudeToY((10 + Math.random() * 65) * DEG, h)
     for (let part = 0; part < 6; part++) {
-      blob(x, y, 15 + Math.random() * 25, 3 + Math.random() * 5, [255, 255, 255], 0.5 + Math.random() * 0.4)
+      blob(x, y, 20 + Math.random() * 25, 5 + Math.random() * 7, [255, 255, 255], 0.6 + Math.random() * 0.4)
       x += 10 + Math.random() * 20
       y += (Math.random() - 0.5) * 8
     }
@@ -572,19 +570,11 @@ function makeConstellation(name) {
   group.add(line, new THREE.Points(GEOMETRY[name].stars, constellationStars), glow)
   group.userData.name = name
   group.userData.phase = Math.random() * 100
-  group.userData.breath = [0, 1].map(() => ({ period: randomIn(BREATH_SECONDS), phase: Math.random() * 2 * Math.PI }))
   group.scale.setScalar(SIZE)
   return group
 }
 
 // Waver a constellation's brightness and line thickness.
-// Stretch and squash a constellation along its own width and height (see BREATH).
-// Scale doesn't change its position or angle, so the fit check is unaffected.
-function breathe(constellation, t) {
-  const [width, height] = constellation.userData.breath.map(({ period, phase }) => SIZE * (1 + BREATH * Math.sin(2 * Math.PI * t / period + phase)))
-  constellation.scale.set(width, height, SIZE)
-}
-
 function shimmer(constellation, t) {
   const [line] = constellation.children
   const phase = constellation.userData.phase
@@ -868,7 +858,6 @@ function loop(now) {
   for (const c of sky) {
     if (c !== target || phase === 'search' || phase === 'rotate') c.rotateZ(c.userData.spin * dt)
     if (!rejected.has(c)) shimmer(c, t)
-    breathe(c, t)
     animateOutline(c.userData.name, t)
   }
 
