@@ -36,6 +36,15 @@ const TURN_PER_PIXEL = 0.5 * DEG  // rotation per pixel dragged on the dial; gea
 const TURN_PER_WHEEL = 0.03 * DEG // rotation per unit of mouse wheel, so desktop players can pan and rotate at once; one notch must not jump the tolerance
 const LOCK_PAUSE = 600          // ms the matched object stays on screen before the next round
 const WRONG_PENALTY = 5         // seconds added to the score for each wrong constellation tested, so guessing costs far more than thinking (the Start page states it too)
+// While fitting, the answer now and then jumps a little left or right for a moment,
+// on screen only: the fit check always uses its true angle. It's too brief for a
+// person to see or react to, but a bot that measures the angle from the screen and
+// copies it turns its object out of the fit, and the ring stops filling until it
+// recovers. The jumps run on a random timer whether or not the player is fitted, so
+// they never hint at when the fit is right.
+const TELEPORT_ANGLE = [5 * DEG, 10 * DEG] // how far it jumps, either way; more than TILT_TOLERANCE, so copying a jump always breaks the fit
+const TELEPORT_MS = 35                     // how long a jump shows: about two frames at 60 Hz
+const TELEPORT_GAP_SECONDS = [0.4, 1.2]    // random time between jumps
 const HELD_DOT_SIZE = 8         // pixels; the dot at the held object's centre...
 const TARGET_DOT_SIZE = 18      // ...sits inside the answer's bigger centre dot when the position is about right
 
@@ -539,6 +548,9 @@ let hovered         // the one under the ring right now
 let progress = 0    // 0..1, how full the ring is
 let turn = 0        // rotation of the held object, anticlockwise, in radians
 let glow = 0        // 0..1, how strongly the ring glows while the object is fitted
+let nextTeleport = 0  // when the answer next jumps (ms, on the frame clock)
+let teleportUntil = 0 // ...and when the current jump ends
+let teleportAngle = 0
 
 // The score so far: time since Start plus any penalties, so the timer on screen
 // always shows exactly what the player's score would be.
@@ -648,6 +660,8 @@ function reveal() {
   held.visible = true
   progress = 0 // the ring now shows the lock hold
   glow = 0
+  nextTeleport = performance.now() + randomIn(TELEPORT_GAP_SECONDS) * 1000
+  teleportUntil = 0
   ringEl.classList.remove('wrong')
   dialEl.style.display = 'flex'
   phase = 'rotate'
@@ -814,7 +828,17 @@ function loop(now) {
   }
   if (phase === 'search' || phase === 'rotate' || phase === 'locked') timerEl.textContent = `${elapsed().toFixed(2)}s`
 
+  // The answer's brief jump (see TELEPORT_ANGLE). It's applied only around drawing
+  // this frame, after the fit check above has used the true angle, then undone.
+  if (phase === 'rotate' && now >= nextTeleport) {
+    teleportAngle = randomIn(TELEPORT_ANGLE) * (Math.random() < 0.5 ? -1 : 1)
+    teleportUntil = now + TELEPORT_MS
+    nextTeleport = now + randomIn(TELEPORT_GAP_SECONDS) * 1000
+  }
+  const teleport = phase === 'rotate' && now < teleportUntil ? teleportAngle : 0
+  if (teleport) target.rotateZ(teleport)
   renderer.render(scene, camera)
+  if (teleport) target.rotateZ(-teleport)
   requestAnimationFrame(loop)
 }
 requestAnimationFrame(loop)
