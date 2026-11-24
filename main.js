@@ -42,9 +42,9 @@ const WRONG_PENALTY = 5         // seconds added to the score for each wrong con
 // copies it turns its object out of the fit, and the ring stops filling until it
 // recovers. The jumps run on a random timer whether or not the player is fitted, so
 // they never hint at when the fit is right.
-const TELEPORT_ANGLE = [5 * DEG, 10 * DEG] // how far it jumps, either way; more than TILT_TOLERANCE, so copying a jump always breaks the fit
-const TELEPORT_MS = 35                     // how long a jump shows: about two frames at 60 Hz
-const TELEPORT_GAP_SECONDS = [0.4, 1.2]    // random time between jumps
+// Each jump lasts exactly one frame (16 ms at 60 Hz), the briefest thing a screen can show.
+const TELEPORT_ANGLE = [3.5 * DEG, 5 * DEG] // how far it jumps, either way; just over TILT_TOLERANCE, so copying a jump still breaks the fit but it barely moves
+const TELEPORT_GAP_SECONDS = [0.6, 1.5]     // random time between jumps
 const HELD_DOT_SIZE = 8         // pixels; the dot at the held object's centre...
 const TARGET_DOT_SIZE = 18      // ...sits inside the answer's bigger centre dot when the position is about right
 
@@ -549,8 +549,6 @@ let progress = 0    // 0..1, how full the ring is
 let turn = 0        // rotation of the held object, anticlockwise, in radians
 let glow = 0        // 0..1, how strongly the ring glows while the object is fitted
 let nextTeleport = 0  // when the answer next jumps (ms, on the frame clock)
-let teleportUntil = 0 // ...and when the current jump ends
-let teleportAngle = 0
 
 // The score so far: time since Start plus any penalties, so the timer on screen
 // always shows exactly what the player's score would be.
@@ -661,7 +659,6 @@ function reveal() {
   progress = 0 // the ring now shows the lock hold
   glow = 0
   nextTeleport = performance.now() + randomIn(TELEPORT_GAP_SECONDS) * 1000
-  teleportUntil = 0
   ringEl.classList.remove('wrong')
   dialEl.style.display = 'flex'
   phase = 'rotate'
@@ -828,14 +825,13 @@ function loop(now) {
   }
   if (phase === 'search' || phase === 'rotate' || phase === 'locked') timerEl.textContent = `${elapsed().toFixed(2)}s`
 
-  // The answer's brief jump (see TELEPORT_ANGLE). It's applied only around drawing
+  // The answer's one-frame jump (see TELEPORT_ANGLE). It's applied only around drawing
   // this frame, after the fit check above has used the true angle, then undone.
+  let teleport = 0
   if (phase === 'rotate' && now >= nextTeleport) {
-    teleportAngle = randomIn(TELEPORT_ANGLE) * (Math.random() < 0.5 ? -1 : 1)
-    teleportUntil = now + TELEPORT_MS
+    teleport = randomIn(TELEPORT_ANGLE) * (Math.random() < 0.5 ? -1 : 1)
     nextTeleport = now + randomIn(TELEPORT_GAP_SECONDS) * 1000
   }
-  const teleport = phase === 'rotate' && now < teleportUntil ? teleportAngle : 0
   if (teleport) target.rotateZ(teleport)
   renderer.render(scene, camera)
   if (teleport) target.rotateZ(-teleport)
