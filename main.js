@@ -49,6 +49,9 @@ const LINE_WIDTHS = [1.5, 2.8]     // pixels; each outline's thickness wavers be
 const JITTER = 0.015               // how far each corner wanders, as a fraction of an object's half-size (about 1–2 px on a phone)
 const NEBULA_TURN_SECONDS = [90, 60] // the nebula is two layers drifting round the sky in opposite directions, one full turn in this long each...
 const NEBULA_PULSE = 0.4           // ...with waves of brightness rolling through them, up to this fraction brighter or darker
+const WISPS = 30                   // dark dust wisps drifting just in front of the constellations, dimming patches of their lines as they pass...
+const WISP_DIM = 0.5               // ...by up to this fraction, so a line is never hidden completely...
+const WISP_TURN_SECONDS = 150      // ...going once round the sky in this long
 const SPARKLE_SHARE = 0.3          // share of stars (in the background and at constellation corners) that now and then flash bright, then fade almost away and come back...
 const SPARKLE_SECONDS = [4, 10]    // ...once per this many seconds, random per star
 const LINE_FADE_SHARE = 0.2        // each line between a constellation's stars is faded out about this share of the time...
@@ -203,23 +206,19 @@ const dot = dotTexture()
 const starMaterial = (size, opacity) =>
   new THREE.PointsMaterial({ map: dot, size, sizeAttenuation: false, transparent: true, opacity, depthWrite: false })
 
-// A moving nebula and Milky Way band in the same blues as the constellations, so a
-// bot can't find the outlines just by looking for blue pixels next to dark ones, and
-// can't subtract a still background either. It's painted on the inside of a big
-// sphere. The band and clouds keep away from the top of the map, which pinches
-// together straight overhead.
+// A texture for the inside of a sphere (longitude across, latitude down), painted with
+// soft elliptical blobs that wrap round the left/right edge so the seam doesn't show.
 // The pixels are worked out here rather than drawn with canvas gradients, because
 // browsers dither gradients in a regular pattern that shows as a grid once stretched
-// over the sky.
-function nebulaTexture() {
-  const w = 1024
-  const h = 512
+// over the sky. Rounding adds a little random noise instead, so no banding shows.
+const SKY_MAP = [1024, 512]
+function skyTexture(paint) {
+  const [w, h] = SKY_MAP
   const light = new Float32Array(w * h * 3)
-  // Adds a soft round cloud of colour, wrapping round the left/right edge so the seam doesn't show.
-  const blob = (x, y, r, rgb, alpha) => {
-    for (let py = Math.max(0, Math.floor(y - r)); py < Math.min(h, y + r); py++) {
-      for (let dx = -Math.ceil(r); dx <= r; dx++) {
-        const d2 = (dx * dx + (py - y) ** 2) / (r * r)
+  const blob = (x, y, rx, ry, rgb, alpha) => {
+    for (let py = Math.max(0, Math.floor(y - ry)); py < Math.min(h, y + ry); py++) {
+      for (let dx = -Math.ceil(rx); dx <= rx; dx++) {
+        const d2 = (dx / rx) ** 2 + ((py - y) / ry) ** 2
         if (d2 >= 1) continue
         const a = alpha * (1 - d2) ** 2
         const i = (py * w + ((Math.round(x) + dx) % w + w) % w) * 3
@@ -227,22 +226,7 @@ function nebulaTexture() {
       }
     }
   }
-  // The Milky Way: a tilted great circle round the sky, which is a wave on this map.
-  const tilt = (25 + Math.random() * 20) * DEG
-  const shift = Math.random() * 2 * Math.PI
-  for (let i = 0; i < 600; i++) {
-    const x = Math.random() * w
-    const latitude = Math.atan(Math.tan(tilt) * Math.sin(x / w * 2 * Math.PI + shift))
-    const y = (0.5 - latitude / Math.PI) * h + (Math.random() - 0.5) * h * 0.07
-    blob(x, y, 8 + Math.random() * 22, [110, 168, 255], 0.03 + Math.random() * 0.04)
-  }
-  // Nebula clouds, between about 55° up and the horizon.
-  for (let i = 0; i < 45; i++) {
-    const rgb = [[110, 168, 255], [80, 110, 220], [150, 120, 255]][i % 3]
-    blob(Math.random() * w, h * (0.2 + Math.random() * 0.32), 30 + Math.random() * 80, rgb, 0.05 + Math.random() * 0.07)
-  }
-  // Just the light, with a little random noise when rounding so no banding or pattern
-  // shows; the shader adds the dark sky underneath.
+  paint(blob, w, h)
   const canvas = document.createElement('canvas')
   canvas.width = w
   canvas.height = h
@@ -254,9 +238,33 @@ function nebulaTexture() {
   }
   ctx.putImageData(image, 0, 0)
   const texture = new THREE.CanvasTexture(canvas)
-  texture.wrapS = THREE.RepeatWrapping // so the layers can drift round and round
+  texture.wrapS = THREE.RepeatWrapping // so it can drift round and round
   return texture
 }
+const latitudeToY = (latitude, h) => (0.5 - latitude / Math.PI) * h
+
+// A moving nebula and Milky Way band in the same blues as the constellations, so a
+// bot can't find the outlines just by looking for blue pixels next to dark ones, and
+// can't subtract a still background either. It's painted on the inside of a big
+// sphere. The band and clouds keep away from the top of the map, which pinches
+// together straight overhead. Just the light: the shader adds the dark sky underneath.
+const nebulaTexture = () => skyTexture((blob, w, h) => {
+  // The Milky Way: a tilted great circle round the sky, which is a wave on this map.
+  const tilt = (25 + Math.random() * 20) * DEG
+  const shift = Math.random() * 2 * Math.PI
+  for (let i = 0; i < 600; i++) {
+    const x = Math.random() * w
+    const latitude = Math.atan(Math.tan(tilt) * Math.sin(x / w * 2 * Math.PI + shift))
+    const r = 8 + Math.random() * 22
+    blob(x, latitudeToY(latitude, h) + (Math.random() - 0.5) * h * 0.07, r, r, [110, 168, 255], 0.03 + Math.random() * 0.04)
+  }
+  // Nebula clouds, between about 55° up and the horizon.
+  for (let i = 0; i < 45; i++) {
+    const rgb = [[110, 168, 255], [80, 110, 220], [150, 120, 255]][i % 3]
+    const r = 30 + Math.random() * 80
+    blob(Math.random() * w, h * (0.2 + Math.random() * 0.32), r, r, rgb, 0.05 + Math.random() * 0.07)
+  }
+})
 
 // Two copies of the nebula, one flipped so they never line up, drift round the sky in
 // opposite directions, and waves of brightness roll through them.
@@ -294,6 +302,32 @@ const nebulaMaterial = new THREE.ShaderMaterial({
 const nebula = new THREE.Mesh(new THREE.SphereGeometry(90, 64, 32), nebulaMaterial)
 nebula.renderOrder = -1 // behind everything
 scene.add(nebula)
+
+// Dark dust wisps on a sphere just inside the constellations, drifting slowly round
+// the sky. Where one passes over an outline it dims that part of the lines, so a bot
+// measuring the outline's angle from the screen gets readings that shift as the dust
+// moves; a person just sees a shape passing behind thin cloud. Each wisp is a short
+// streak of overlapping blobs, kept between about 10° and 75° up, where the
+// constellations are.
+const wispTexture = () => skyTexture((blob, w, h) => {
+  for (let i = 0; i < WISPS; i++) {
+    let x = Math.random() * w
+    let y = latitudeToY((10 + Math.random() * 65) * DEG, h)
+    for (let part = 0; part < 6; part++) {
+      blob(x, y, 15 + Math.random() * 25, 3 + Math.random() * 5, [255, 255, 255], 0.5 + Math.random() * 0.4)
+      x += 10 + Math.random() * 20
+      y += (Math.random() - 0.5) * 8
+    }
+  }
+})
+const wisps = new THREE.Mesh(
+  new THREE.SphereGeometry(DISTANCE - 0.5, 64, 32),
+  new THREE.MeshBasicMaterial({
+    color: 0x02040a, alphaMap: wispTexture(), opacity: WISP_DIM, transparent: true, side: THREE.BackSide, depthTest: false, depthWrite: false,
+  }),
+)
+wisps.renderOrder = 0.5 // over the constellations (0), under the held object and the centre dots (1 and up), which are never dimmed
+scene.add(wisps)
 
 // Each star's own timing. Every star twinkles gently; SPARKLE_SHARE of them also sparkle.
 const randomIn = ([low, high]) => low + Math.random() * (high - low)
@@ -523,6 +557,7 @@ const heldDot = new THREE.Points(centrePoint, starMaterial(HELD_DOT_SIZE, 1))
 const targetDot = new THREE.Points(centrePoint, starMaterial(TARGET_DOT_SIZE, 1))
 heldDot.material.depthTest = targetDot.material.depthTest = false
 targetDot.material.color.set(0x6ea8ff) // the constellation blue
+targetDot.renderOrder = 1 // over the dust wisps
 heldDot.renderOrder = 2 // drawn over the answer's dot
 held.add(heldDot)
 
@@ -770,6 +805,7 @@ function loop(now) {
   const t = now / 1000
   earthMaterial.uniforms.drift.value = now * 0.000002
   nebulaMaterial.uniforms.time.value = t
+  wisps.rotation.y = t * 2 * Math.PI / WISP_TURN_SECONDS
   camera.getWorldDirection(forward)
 
   setStarBrightness(backgroundStars.geometry.attributes.color, backgroundTimings, t, 0.7)

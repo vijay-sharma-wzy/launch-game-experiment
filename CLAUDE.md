@@ -61,7 +61,7 @@ The score is the total time. Rules that keep it fair:
 - Objects that are arguable for a prompt (`maybe` in `PROMPTS`) are never in the sky with it.
 - The field of view is fixed along the screen's longer side, so phones and desktops see the same amount of sky.
 
-Visual noise makes a screen-reading bot's job harder without changing what a human sees: every outline is drawn in slightly varying blues whose brightness and thickness waver over time, corners wobble by a pixel or two, each line between a constellation's stars fades out and back on its own timing (so a few are always missing, never the same ones for long), stars twinkle and some sparkle (flash, fade almost away, return), and a nebula and Milky Way band in similar blues sit behind everything, drifting round the sky in two opposing layers with waves of brightness rolling through them, so the background is never still.
+Visual noise makes a screen-reading bot's job harder without changing what a human sees: every outline is drawn in slightly varying blues whose brightness and thickness waver over time, corners wobble by a pixel or two, each line between a constellation's stars fades out and back on its own timing (so a few are always missing, never the same ones for long), stars twinkle and some sparkle (flash, fade almost away, return), and a nebula and Milky Way band in similar blues sit behind everything, drifting round the sky in two opposing layers with waves of brightness rolling through them, so the background is never still. Dark dust wisps drift slowly just in front of the constellations, dimming patches of their lines (never fully) as they pass, so an angle measured from the screen keeps shifting; the held object and centre dots are drawn above them.
 
 ## Stack and layout
 
