@@ -54,8 +54,8 @@ const WISP_DIM = 0.5               // ...by up to this fraction, so a line is ne
 const WISP_TURN_SECONDS = 150      // ...going once round the sky in this long
 const BREATH = 0.06                // each outline slowly stretches and squashes by up to this fraction along its own width and height, so a fixed template never quite fits...
 const BREATH_SECONDS = [3, 6]      // ...once per this many seconds, random per constellation and per axis
-const SPARKLE_SHARE = 0.3          // share of stars (in the background and at constellation corners) that now and then flash bright, then fade almost away and come back...
-const SPARKLE_SECONDS = [4, 10]    // ...once per this many seconds, random per star
+const STAR_CYCLE_SECONDS = [4, 12] // every star (in the background and at constellation corners) twinkles, and once per this many seconds, random per star, flares up, later dims out completely, and comes back
+const STAR_SWELL = 0.5             // a star's size grows with its brightness (size = normal size × brightness ^ this), so it swells as it flares (about 1.5× at the peak) and shrinks to nothing as it dims out
 const LINE_FADE_SHARE = 0.2        // each line between a constellation's stars is faded out about this share of the time...
 const LINE_FADE_SECONDS = [4, 9]   // ...once per this many seconds, random per line, so a few lines are always missing but never the same ones for long
 const GLOW_SECONDS = 0.35          // the "fitted" glow eases in and out this slowly instead of snapping on and off
@@ -331,42 +331,84 @@ const wisps = new THREE.Mesh(
 wisps.renderOrder = 0.5 // over the constellations (0), under the held object and the centre dots (1 and up), which are never dimmed
 scene.add(wisps)
 
-// Each star's own timing. Every star twinkles gently; SPARKLE_SHARE of them also sparkle.
+// Each star's own timing.
 const randomIn = ([low, high]) => low + Math.random() * (high - low)
 function starTiming() {
   return {
     rate: 0.8 + Math.random() * 1.6,
     phase: Math.random() * 2 * Math.PI,
-    sparkles: Math.random() < SPARKLE_SHARE,
-    period: randomIn(SPARKLE_SECONDS),
+    period: randomIn(STAR_CYCLE_SECONDS),
     offset: Math.random(),
   }
 }
 
-// A star's brightness at time t (1 = normal). A sparkling star flashes bright, then
-// later fades almost to nothing and comes back, once per period.
+// A star's brightness at time t (1 = normal). It twinkles all the time, and once per
+// period flares up, settles, later dims out completely, then comes back.
 function starBrightness(star, t) {
-  const twinkle = 0.85 + 0.15 * Math.sin(t * star.rate + star.phase)
-  if (!star.sparkles) return twinkle
+  const twinkle = 0.75 + 0.25 * Math.sin(t * star.rate + star.phase)
   const p = (t / star.period + star.offset) % 1
-  const flash = 1.5 * Math.exp(-p * 30)
-  const gone = THREE.MathUtils.smoothstep(p, 0.5, 0.6) * (1 - THREE.MathUtils.smoothstep(p, 0.8, 0.9))
-  return twinkle * (1 + flash) * (1 - 0.9 * gone)
+  const flare = 1.2 * Math.exp(-p * 12)
+  const out = THREE.MathUtils.smoothstep(p, 0.55, 0.65) * (1 - THREE.MathUtils.smoothstep(p, 0.8, 0.9))
+  return twinkle * (1 + flare) * (1 - out)
 }
 
-// Stars drawn with additive blending and a brightness per star, so each one can
-// twinkle, sparkle and fade on its own (black adds nothing, so a faded star is gone).
-const starsMaterial = (size) => new THREE.PointsMaterial({
-  map: dot, size, sizeAttenuation: false, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+// A star: a soft round core with faint four-point spikes, which only really show when
+// a star swells as it flares.
+function starTexture() {
+  const size = 64
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = size
+  const ctx = canvas.getContext('2d')
+  const c = size / 2
+  const core = ctx.createRadialGradient(c, c, 0, c, c, c * 0.5)
+  core.addColorStop(0, 'rgba(255,255,255,1)')
+  core.addColorStop(0.35, 'rgba(255,255,255,0.8)')
+  core.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = core
+  ctx.fillRect(0, 0, size, size)
+  for (const [dx, dy] of [[1, 0], [0, 1]]) {
+    const spike = ctx.createLinearGradient(c - dx * c, c - dy * c, c + dx * c, c + dy * c)
+    spike.addColorStop(0, 'rgba(255,255,255,0)')
+    spike.addColorStop(0.5, 'rgba(255,255,255,0.45)')
+    spike.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = spike
+    ctx.fillRect(dx ? 0 : c - 1, dy ? 0 : c - 1, dx ? size : 2, dy ? size : 2)
+  }
+  return new THREE.CanvasTexture(canvas)
+}
+const starSprite = starTexture()
+const SPRITE_SCALE = 2.5 // the sprite leaves room round the core for the spikes, so it's drawn this much bigger than the star's core size
+
+// Stars with their own brightness and size each, which the built-in points material
+// can't do. Drawn additively, so a star dimmed to black adds nothing and is gone.
+// `size` is the star's core size in pixels at normal brightness.
+const starsMaterial = (size) => new THREE.ShaderMaterial({
+  uniforms: { map: { value: starSprite }, size: { value: size * SPRITE_SCALE * renderer.getPixelRatio() }, swell: { value: STAR_SWELL } },
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  vertexShader: `
+    attribute float brightness;
+    uniform float size;
+    uniform float swell;
+    varying float vBrightness;
+    void main() {
+      vBrightness = brightness;
+      gl_PointSize = size * pow(max(brightness, 0.0), swell);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }`,
+  fragmentShader: `
+    uniform sampler2D map;
+    varying float vBrightness;
+    void main() {
+      gl_FragColor = vec4(vec3(min(vBrightness, 1.0) * texture2D(map, gl_PointCoord).a), 1.0);
+    }`,
 })
 function brightnessAttribute(count) {
-  return new THREE.Float32BufferAttribute(new Float32Array(count * 3).fill(1), 3)
+  return new THREE.Float32BufferAttribute(new Float32Array(count).fill(1), 1)
 }
 function setStarBrightness(attribute, timings, t, scale) {
-  timings.forEach((star, i) => {
-    const b = scale * starBrightness(star, t)
-    attribute.setXYZ(i, b, b, b)
-  })
+  timings.forEach((star, i) => attribute.setX(i, scale * starBrightness(star, t)))
   attribute.needsUpdate = true
 }
 
@@ -378,7 +420,7 @@ const backgroundTimings = Array.from({ length: BACKGROUND_STARS }, starTiming)
 const backgroundStars = new THREE.Points(
   new THREE.BufferGeometry()
     .setAttribute('position', new THREE.Float32BufferAttribute(backgroundPositions, 3))
-    .setAttribute('color', brightnessAttribute(BACKGROUND_STARS)),
+    .setAttribute('brightness', brightnessAttribute(BACKGROUND_STARS)),
   starsMaterial(3),
 )
 scene.add(backgroundStars)
@@ -457,7 +499,7 @@ function nearBlue() {
 
 // One line outline and one set of corner stars per object, shared by every copy.
 // Line2 instead of a plain line because WebGL draws plain lines 1px wide. Each corner
-// gets its own shade of blue, blended along the lines, its own wobble and sparkle
+// gets its own shade of blue, blended along the lines, its own wobble and star
 // timing, and each line its own fade timing.
 const GEOMETRY = {}
 for (const name in OBJECTS) {
@@ -469,7 +511,7 @@ for (const name in OBJECTS) {
       .setColors([...colors, colors[0]].flatMap((c) => [c.r, c.g, c.b])),
     stars: new THREE.BufferGeometry()
       .setAttribute('position', new THREE.Float32BufferAttribute(points.flatMap(([x, y]) => [x, y, 0]), 3))
-      .setAttribute('color', brightnessAttribute(points.length)),
+      .setAttribute('brightness', brightnessAttribute(points.length)),
     colors,
     wobble: points.map(() => [Math.random() * 2 * Math.PI, Math.random() * 2 * Math.PI]),
     starTimings: points.map(starTiming),
@@ -487,7 +529,7 @@ function lineVisibility({ period, offset }, t) {
 
 // Animate an object's outline: move every corner (its lines and its star) by a pixel
 // or two, smoothly, so a bot's estimate of the outline is never exactly the same twice;
-// fade each line in and out; and twinkle and sparkle the corner stars.
+// fade each line in and out; and twinkle, flare and dim the corner stars.
 function animateOutline(name, t) {
   const { line, stars, colors, wobble: phases, starTimings, lineFades } = GEOMETRY[name]
   const points = OBJECTS[name].map(([x, y], i) => [
@@ -509,7 +551,7 @@ function animateOutline(name, t) {
   segments.needsUpdate = true
   segmentColors.needsUpdate = true
   stars.attributes.position.needsUpdate = true
-  setStarBrightness(stars.attributes.color, starTimings, t, 1)
+  setStarBrightness(stars.attributes.brightness, starTimings, t, 1)
 }
 
 const constellationStars = starsMaterial(9)
@@ -818,7 +860,7 @@ function loop(now) {
   wisps.rotation.y = t * 2 * Math.PI / WISP_TURN_SECONDS
   camera.getWorldDirection(forward)
 
-  setStarBrightness(backgroundStars.geometry.attributes.color, backgroundTimings, t, 0.7)
+  setStarBrightness(backgroundStars.geometry.attributes.brightness, backgroundTimings, t, 0.7)
 
   // Spin every constellation in place, the answer too while the player turns the
   // dial, so fitting it means tracking a moving shape. Only a locked answer stops,
