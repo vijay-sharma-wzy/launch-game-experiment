@@ -1,0 +1,37 @@
+html, body { margin: 0; height: 100%; overflow: hidden; background: #07080d; color: #fff; font-family: system-ui, sans-serif; }
+canvas { position: fixed; inset: 0; display: block; touch-action: none; }
+button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+
+.overlay {
+  position: fixed; inset: 0; box-sizing: border-box; padding: 24px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  text-align: center; user-select: none; -webkit-user-select: none; background: rgba(7, 8, 13, 0.78);
+}
+.overlay h1 { margin: 0; font-size: 44px; letter-spacing: 4px; }
+.overlay p { margin: 0; max-width: 340px; line-height: 1.5; }
+.primary { padding: 14px 40px; font-size: 20px; font-weight: 600; color: #07080d; background: #f4f1e8; border: 0; border-radius: 999px; }
+.back { color: #fff; opacity: 0.8; }
+.done { display: none; }
+.score { font-size: 40px; font-variant-numeric: tabular-nums; }
+
+/* The bot-risk readout on the DONE screen is for the team while we experiment; a real
+   release would keep it on the server. */
+.readout { max-width: 360px; font-size: 13px; opacity: 0.75; text-align: left; }
+.readout summary { cursor: pointer; text-align: center; }
+.readout table { margin-top: 8px; border-collapse: collapse; width: 100%; }
+.readout td { padding: 2px 6px; font-variant-numeric: tabular-nums; }
+
+/* HUD: the round and the running score, so the player always knows where they are. */
+.hud {
+  position: fixed; top: 0; left: 0; right: 0; padding: 16px 20px; padding-top: max(16px, env(safe-area-inset-top));
+  display: flex; justify-content: space-between; pointer-events: none;
+  font-size: 18px; font-variant-numeric: tabular-nums; text-shadow: 0 0 6px #000;
+}
+.penalty { margin-right: 8px; font-weight: 700; opacity: 0; }
+.penalty.show { animation: penalty 1.6s ease-out; }
+@keyframes penalty { 0%, 60% { opacity: 1; } 100% { opacity: 0; } }
+
+.prompt {
+  position: fixed; top: 54px; left: 0; right: 0; padding: 0 20px; margin-top: env(safe-area-inset-top);
+  text-align: center; font-size: 20px; font-weight: 600; text-shadow: 0 0 8px #000, 0 0 2px #000; pointer-events: none;
+}

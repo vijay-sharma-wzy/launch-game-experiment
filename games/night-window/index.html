@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Night Window · LAUNCH</title>
+</head>
+<body>
+  <!-- The game's logic is a simulated server (logic.js inside shared/server/game-server.js);
+       the page itself is the display-only client in shared/shell.js. -->
+  <script type="module">
+    import { runGame } from '../../shared/shell.js'
+    import { createGameServer } from '../../shared/server/game-server.js'
+    import createLogic, { ROUNDS, PENALTY } from './logic.js'
+
+    runGame({
+      title: 'Night Window',
+      instructions: 'Hold to shine the lamp on the objects that fit the rule as they pass the window. The rule changes as you go. Shining on one that doesn’t fit adds 15 seconds.',
+      server: createGameServer(createLogic, { rounds: ROUNDS, penaltySeconds: PENALTY }),
+    })
+  </script>
+</body>
+</html>

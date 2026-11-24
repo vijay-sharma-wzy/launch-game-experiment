@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Ink Trail · LAUNCH</title>
+</head>
+<body>
+  <!-- The game's logic is a simulated server (logic.js inside shared/server/game-server.js);
+       the page itself is the display-only client in shared/shell.js. -->
+  <script type="module">
+    import { runGame } from '../../shared/shell.js'
+    import { createGameServer } from '../../shared/server/game-server.js'
+    import createLogic, { ROUNDS, PENALTY } from './logic.js'
+
+    runGame({
+      title: 'Ink Trail',
+      instructions: 'Hold and draw a line through the objects in the order the prompt asks. Wrong links add 15 seconds.',
+      server: createGameServer(createLogic, { rounds: ROUNDS, penaltySeconds: PENALTY }),
+    })
+  </script>
+</body>
+</html>
