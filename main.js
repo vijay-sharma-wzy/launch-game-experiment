@@ -647,7 +647,8 @@ function reveal() {
   held.material.color.set(HELD_COLOR)
   held.visible = true
   progress = 0 // the ring now shows the lock hold
-  glow = 0  ringEl.classList.remove('wrong')
+  glow = 0
+  ringEl.classList.remove('wrong')
   dialEl.style.display = 'flex'
   phase = 'rotate'
 }
