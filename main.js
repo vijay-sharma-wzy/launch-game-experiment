@@ -52,6 +52,8 @@ const NEBULA_PULSE = 0.4           // ...with waves of brightness rolling throug
 const WISPS = 30                   // dark dust wisps drifting just in front of the constellations, dimming patches of their lines as they pass...
 const WISP_DIM = 0.5               // ...by up to this fraction, so a line is never hidden completely...
 const WISP_TURN_SECONDS = 150      // ...going once round the sky in this long
+const BREATH = 0.06                // each outline slowly stretches and squashes by up to this fraction along its own width and height, so a fixed template never quite fits...
+const BREATH_SECONDS = [3, 6]      // ...once per this many seconds, random per constellation and per axis
 const SPARKLE_SHARE = 0.3          // share of stars (in the background and at constellation corners) that now and then flash bright, then fade almost away and come back...
 const SPARKLE_SECONDS = [4, 10]    // ...once per this many seconds, random per star
 const LINE_FADE_SHARE = 0.2        // each line between a constellation's stars is faded out about this share of the time...
@@ -528,11 +530,19 @@ function makeConstellation(name) {
   group.add(line, new THREE.Points(GEOMETRY[name].stars, constellationStars), glow)
   group.userData.name = name
   group.userData.phase = Math.random() * 100
+  group.userData.breath = [0, 1].map(() => ({ period: randomIn(BREATH_SECONDS), phase: Math.random() * 2 * Math.PI }))
   group.scale.setScalar(SIZE)
   return group
 }
 
 // Waver a constellation's brightness and line thickness.
+// Stretch and squash a constellation along its own width and height (see BREATH).
+// Scale doesn't change its position or angle, so the fit check is unaffected.
+function breathe(constellation, t) {
+  const [width, height] = constellation.userData.breath.map(({ period, phase }) => SIZE * (1 + BREATH * Math.sin(2 * Math.PI * t / period + phase)))
+  constellation.scale.set(width, height, SIZE)
+}
+
 function shimmer(constellation, t) {
   const [line] = constellation.children
   const phase = constellation.userData.phase
@@ -816,6 +826,7 @@ function loop(now) {
   for (const c of sky) {
     if (c !== target || phase === 'search' || phase === 'rotate') c.rotateZ(c.userData.spin * dt)
     if (!rejected.has(c)) shimmer(c, t)
+    breathe(c, t)
     animateOutline(c.userData.name, t)
   }
 
