@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Word Wheel · LAUNCH</title>
+</head>
+<body>
+  <!-- The game's rules are a simulated server (logic.js inside shared/server/game-server.js);
+       the page itself is the display-only client in shared/shell.js. -->
+  <script type="module">
+    import { runGame } from '../../shared/shell.js'
+    import { createGameServer } from '../../shared/server/game-server.js'
+    import createLogic, { ROUNDS, STEPS, PENALTY } from './logic.js'
+
+    runGame({
+      title: 'Word Wheel',
+      instructions: 'Drag the wheel to the word that answers the clue. Keep it in the window until the ring fills. A wrong word adds 8 seconds.',
+      server: createGameServer(createLogic, { rounds: ROUNDS, steps: STEPS, penaltySeconds: PENALTY }),
+    })
+  </script>
+</body>
+</html>

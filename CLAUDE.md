@@ -7,9 +7,9 @@
 
 ## Purpose
 
-A fully client-side demo of a **human verification game that also ranks users** for the queue of a hype-release, first-come-first-served (FCFS) web app.
+A fully client-side demo of **human verification games that also rank users** for the queue of a hype-release, first-come-first-served (FCFS) web app. The landing page lists six games; Constellations is the first and the model for the rest.
 
-Designing a new or different game? Follow `docs/game-generator-spec-v3.md`, and read `docs/game-history.md` first: it records five earlier experimental games (removed; in git history) and why play tests found they couldn't rank players.
+Designing a new or different game? Follow `docs/game-generator-spec-v3.md`, and read `docs/game-history.md` first: it records every game so far, five earlier experiments that play tests found couldn't rank players (removed; in git history), and which checks the current games have and haven't had.
 
 The game will eventually run on AWS (servers, databases, etc.). Until then, this repo **simulates that AWS infra on the client side**. There are no real backends, APIs or third-party services here.
 
@@ -47,9 +47,12 @@ This repo is only about what **the game itself** can do to filter bots and rank 
 
 Logic that will later run on the server (issuing sessions, timing rounds on the server's clock, validating and storing scores) should live in clearly separated client-side code that mimics a server, so it can be lifted into Lambda later. Do not trust or depend on it as real security; it is a stand-in.
 
-Current state: no server simulation exists yet. The score is just the local time from the Start tap to the last lock, plus wrong-pick penalties (`elapsed()` and `lock()` in `main.js`).
+Current state:
 
-## Game design
+- **Constellations** has no server simulation. Its score is the local time from the Start tap to the last lock, plus wrong-pick penalties (`elapsed()` and `lock()` in `games/constellations/main.js`).
+- **The five newer games** run on a simulated server. Everything under `shared/server/` and each game's `logic.js` is server code: rules, answers, the clock, penalties, telemetry and the bot-risk scorer. The client (`shared/shell.js`, `shared/render.js`) only forwards raw pointer input and paints the frames it gets back, and the two sides talk only through `shared/transport.js`, which passes JSON as a network would. Pictures and words reach the client as finished images under random ids, never as names.
+
+## Game design: Constellations
 
 The player floats in space with Earth directly below. Constellations (outlines of objects) are scattered all the way round the player and overhead, never below, and each one slowly spins in place. The player drags the sky freely anywhere in the dome, up to straight overhead. A ring marks the centre of the screen. A game is 3 rounds, and in each round thinking and moving happen together rather than in separate steps:
 
@@ -65,23 +68,42 @@ The score is the total time. Rules that keep it fair:
 
 Visual noise makes a screen-reading bot's job harder without changing what a human sees: every outline is drawn in slightly varying blues whose brightness and thickness waver over time, corners wobble by a pixel or two, each line between a constellation's stars fades out and back on its own timing (so a few are always missing, never the same ones for long), every star twinkles and, on its own timing, flares up, dims out completely and comes back, growing as it brightens and shrinking to nothing as it dims, and a nebula and Milky Way band in similar blues sit behind everything, drifting round the sky in two opposing layers with waves of brightness rolling through them, so the background is never still. Dark dust wisps drift just in front of the constellations, dimming patches of their lines by up to 75% (never fully) as they pass, so an angle measured from the screen keeps shifting; the held object and centre dots are drawn above them.
 
+## Game design: the five newer games
+
+Each has its own design spec in `games/<name>/DESIGN.md`, in the framework's format, with self-scores and known weak points. They share one shape: 3 rounds of 3 steps; every step is a new prompt with exactly one answer; a wrong commit adds 8 seconds; and each has a continuous phase in which something wanders and one small probe is hidden, so the scorer can measure how the player responds.
+
+| Game | Folder | What the player does |
+|---|---|---|
+| Trail Forks | `games/trail-forks/` | Drags a dot along a swaying trail that splits, to the one animal that answers the prompt |
+| Lights Out | `games/lights-out/` | Memorises a board, then scratches the cover off the thing that answers each clue. The clue and the things are never visible together |
+| Word Wheel | `games/word-wheel/` | Scrolls a wheel of words to the one that answers a written clue, and holds it in the window against the wheel's slip |
+| Odd Pair | `games/odd-pair/` | Scrolls a row of pairs that belong together and pulls apart the one that doesn't, keeping the link straight as the pair sways |
+| Two Halves | `games/two-halves/` | Among floating halves of foods, drags together the two that make the one answering the prompt |
+
+The play area is a centred column no wider than 0.62 of the screen's height, so a desktop shows no more of a game than a phone. The DONE screen shows the scorer's readout; that is for the team while we experiment, and a real release would keep it on the server.
+
 ## Stack and layout
 
-- Vite + plain JavaScript (ES modules) + three.js. No framework, no TypeScript.
-- `index.html` contains the markup, styles and overlays (the HUD, the prompt, the ring, the rotation dial, the Start page and the DONE screen).
-- `main.js` contains all game logic: tunables at the top, then objects and prompts, the scene (stars, Earth, constellations), game state, rounds, controls, the lock check, and the game loop.
-- `vite.config.js` sets `base: "./"` so the build works from any host or sub-path.
-- `docs/game-generator-spec-v3.md`: the framework for designing games; `docs/game-history.md`: earlier games and play-test findings.
+- Vite + plain JavaScript (ES modules) + three.js (Constellations only). No framework, no TypeScript.
+- `index.html` is the landing page: the list of six games.
+- `games/constellations/`: `index.html` (markup, styles and overlays) and `main.js` (all game logic: tunables at the top, then objects and prompts, the scene, game state, rounds, controls, the lock check, and the game loop).
+- `games/<name>/` for each newer game: `index.html` (title and instructions), `logic.js` (server-side rules, tunables at the top) and `DESIGN.md`.
+- `shared/server/`: `game-server.js` (clock, rounds, steps, penalties, telemetry), `scorer.js` (bot-risk score), `steer.js` (wandering targets, holds and probes), `sprites.js` (draws pictures and words into images), `palette.js`, `random.js`.
+- `shared/`: `shell.js` and `shell.css` (start screen, HUD, DONE screen, input forwarding), `render.js` (paints a frame), `transport.js` (the client–server boundary).
+- `tools/solve.mjs`: plays every newer game end to end with a solver that can read server state, and audits every frame sent to the client.
+- `vite.config.js` sets `base: "./"` so the build works from any host or sub-path, and lists every page to build. Add new games there and to `tools/solve.mjs`.
+- `docs/game-generator-spec-v3.md`: the framework for designing games; `docs/game-history.md`: every game, play-test findings and test status.
 
 ## Commands
 
 - `npm run dev` starts the dev server.
 - `npm run build` builds into `dist/`.
 - `npm run preview` serves the built `dist/` locally.
+- `npm run solve` checks that every newer game can be finished and leaks nothing to the client. Run it after changing any `logic.js` or anything in `shared/`.
 
 ## Testing on a phone
 
-The game needs no permissions or secure context, so `npm run dev -- --host` on the LAN works, as does a Netlify branch deploy.
+The games need no permissions or secure context, so `npm run dev -- --host` on the LAN works, as does a Netlify branch deploy.
 
 ## Deployment
 
@@ -95,4 +117,4 @@ Netlify, configured in `netlify.toml`. Each branch deploys to its own URL:
 
 ## Code style
 
-Match the existing code: no semicolons, single quotes in JS, two-space indent, and plain DOM APIs. Comments explain the *why* behind game and anti-bot decisions. Keep tunable numbers as named constants in the `Tunables` block at the top of `main.js`.
+Match the existing code: no semicolons, single quotes in JS, two-space indent, and plain DOM APIs. Comments explain the *why* behind game and anti-bot decisions. Keep tunable numbers as named constants in the `Tunables` block at the top of each game's `main.js` or `logic.js`.
