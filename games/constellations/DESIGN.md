@@ -1,6 +1,6 @@
 # Constellations (game 1)
 
-The first game, built before the framework in `docs/game-generator-spec-v2.md`. It is a three.js page with its rules in `main.js` on the client: it predates the simulated server in `shared/server/`, so it does not meet the spec's server-authoritative or telemetry requirements, and its rounds have one semantic decision each (spec P2 asks for three).
+The first game, built before the framework now in `docs/game-generator-spec-v3.md`. It is a three.js page with its rules in `main.js` on the client: it predates the simulated server in `shared/server/`, so it does not meet the spec's server-authoritative or telemetry requirements, and its rounds have one semantic decision each (spec P2 asks for three).
 
 ## How it plays
 

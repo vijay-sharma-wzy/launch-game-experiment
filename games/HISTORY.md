@@ -13,7 +13,20 @@ Spec §4 step 1 and P7: every new game must use a family and dimension combinati
 | 5 | Night Window | Timing & rhythm | none (world scrolls itself) | hold over it | follow a moving target | the rule itself changes | assembled from parts | speed, reversal, control response |
 | 6 | Toss & Catch | Spatial reasoning | view follows with momentum | hold open as it lands | steer under a falling object | new items arrive | line drawings | nudge (gust), speed (gravity), control response |
 
-Families not yet used as primary: Align & hold (only as game 1's secondary), Assemble.
+Families not yet used as primary: Align & hold (only as game 1's secondary), Assemble, and the new families in spec v3 §3 (Route planning, Recall, Read & reason, Compare & spot).
+
+## Play-test findings
+
+Games 2–6 were built to the v2 spec. Play tests (2026-11-25) found that none of them ranks players well; spec v3 turns each problem into a rule (§13).
+
+| Game | Verdict | Main problems | v3 rule |
+|---|---|---|---|
+| 1 Constellations | Works well | One specific answer, found by looking around; natural exploration motion; equal work; hard reset each round. Its one-frame rotation probe was visible and was removed. | The model to learn from (not to copy) |
+| 2 Ink Trail | Confusing | Drawing both linked objects and panned the view | P10 one job per gesture |
+| 3 Orbit Sort | Intuitive, doesn't rank | Any object was a valid next move, so time was reaction speed; objects and rule persisted, so players sorted one by one | R0 one specific answer; P7 hard reset |
+| 4 Odd Lens | Intuitive, doesn't rank | The newly swapped-in object was always the odd one; prompt never changed; lens too sensitive | P2 not derivable from changes; P10 tuned sensitivity |
+| 5 Night Window | Can't rank | Fixed prompt and pace, so a perfect run is easy and identical for everyone (and for bots) | R0 player-paced, no easy perfect score |
+| 6 Toss & Catch | Too hard to control | Unreachable throws, late swerves, a net too slow to follow; one rule per round let a bot settle in | P10 reachable targets; R0; P7 |
 
 ## Prompt themes
 

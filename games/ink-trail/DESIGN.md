@@ -1,6 +1,6 @@
 # Ink Trail (game 2)
 
-Spec format from `docs/game-generator-spec-v2.md` §7. Rules: `logic.js` (simulated server). Display: `shared/shell.js` + `shared/render.js`.
+Written to §7 of the v2 framework, since replaced by `docs/game-generator-spec-v3.md` (v2 is in git history). Play tests found design problems with this game: see the spec's §13 and `games/HISTORY.md`. Rules: `logic.js` (simulated server). Display: `shared/shell.js` + `shared/render.js`.
 
 ```yaml
 title: Ink Trail

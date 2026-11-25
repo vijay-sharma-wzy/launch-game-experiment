@@ -9,7 +9,7 @@
 
 A fully client-side demo of **human verification games that also rank users** for the queue of a hype-release, first-come-first-served (FCFS) web app. The site's front page lists six games to compare; each is a candidate for the real release.
 
-New games follow the framework in `docs/game-generator-spec-v2.md` (design spec, rubric, history, telemetry, scorer). Read it before designing or changing a game.
+New games follow the framework in `docs/game-generator-spec-v3.md` (design spec, rubric, history, telemetry, scorer). Read it before designing or changing a game.
 
 The game will eventually run on AWS (servers, databases, etc.). Until then, this repo **simulates that AWS infra on the client side**. There are no real backends, APIs or third-party services here.
 
@@ -65,7 +65,9 @@ Current state:
 | 5 | Night Window | `games/night-window/` | Timing & rhythm | `games/night-window/DESIGN.md` |
 | 6 | Toss & Catch | `games/toss-catch/` | Spatial reasoning | `games/toss-catch/DESIGN.md` |
 
-Each game's `DESIGN.md` is the source of truth for how it plays; keep it updated with the game. `games/HISTORY.md` records every game's family and dimension combination and the attacker coverage record (spec §4, P7): add a row for every new game, and never reuse a combination.
+Each game's `DESIGN.md` is the source of truth for how it plays; keep it updated with the game. `games/HISTORY.md` records every game's family and dimension combination, play-test findings and the attacker coverage record (spec §4, §12): add a row for every new game, and never reuse a combination.
+
+**The goal is ranking, not pass/fail.** A game must spread players' finish times out by skill (searching, reasoning, steering), so the FCFS queue can be ordered, while being costly to bot and making bots play visibly unlike people (spec v3 goals and R0). Play tests found games 2–6 don't rank players well (each broke a rule now in spec v3 §13); they were built to the earlier v2 spec and are candidates for redesign or replacement. Constellations is the example that works: one specific answer per round, found by looking around, with a full reset between rounds.
 
 Rules shared by games 2–6:
 
@@ -84,7 +86,7 @@ Rules shared by games 2–6:
 - `shared/shell.js`, `shell.css`, `render.js`: the display-only client for games 2–6 (start screen, HUD, DONE screen with the bot-risk readout, input forwarding, drawing).
 - `shared/transport.js`: the JSON boundary between client and simulated server.
 - `shared/server/`: simulated server code: `game-server.js` (clock, penalties, rounds, telemetry), `scorer.js` (features and risk score), `semantics.js` (categories and sizes), `palette.js`, `random.js`.
-- `docs/game-generator-spec-v2.md`: the framework every new game follows.
+- `docs/game-generator-spec-v3.md`: the framework every new game follows.
 - `vite.config.js`: builds every page (list new games in `GAMES`) and sets `base: "./"` so the build works from any host or sub-path.
 
 ## Commands
