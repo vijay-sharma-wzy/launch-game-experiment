@@ -2,6 +2,8 @@
 
 Spec §4 step 1 and P7: every new game must use a family and dimension combination not used here, and should steer away from what the attacker's tool library already handles. Add a row for each new game.
 
+**Status (2026-11-25):** only game 1, Constellations, is live (at the site root). Games 2–6 were removed after the play tests below; their code, design specs and the shared simulated server, telemetry and scorer they ran on are in git history (commit `e081f9e`, under `games/` and `shared/`), and can be recovered with `git show e081f9e:<path>`.
+
 ## Games
 
 | # | Game | Family (primary / secondary) | View control | Commit gesture | Continuous task | Meaning in the loop | Drawing style | Probes |
@@ -30,13 +32,13 @@ Games 2–6 were built to the v2 spec. Play tests (2026-11-25) found that none o
 
 ## Prompt themes
 
-All games draw objects from `shared/objects.js` (32 outlines) and meanings from `shared/server/semantics.js`:
+Games 2–6 drew objects from `shared/objects.js` (32 outlines) and meanings from `shared/server/semantics.js` (both removed; in git history):
 
 - Categories: wear, eat, alive, fly, kitchen, travel, drink, shelter, water (each with clear and arguable members).
 - Real-life size order (Ink Trail), with every pair at least 2.5× apart.
-- Game 1 keeps its own prompt list in `games/constellations/main.js`.
+- Game 1 keeps its own prompt list in `main.js`.
 
-Known carry-over risk (spec goal 4): every game reuses the same 32 outlines and category lists, so an attacker who builds an outline recogniser and a category table for one game reuses both in the others. The drawing style changes per game (silhouette, line, blur, parts), which raises the recogniser's cost but doesn't remove the reuse. A per-game asset set and generated prompts would.
+Known carry-over risk (spec goal 5): games 2–6 all reused the same 32 outlines and category lists, so an attacker who builds an outline recogniser and a category table for one game reuses both in the others. The drawing style changes per game (silhouette, line, blur, parts), which raises the recogniser's cost but doesn't remove the reuse. A per-game asset set and generated prompts would.
 
 ## Attacker coverage record
 

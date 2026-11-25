@@ -424,7 +424,7 @@ Measure on at least 30 human sessions (or naive-player passes until real players
 
 ## 12. History and coverage record
 
-Keep these in the repo (`games/HISTORY.md`) and read them before every run:
+Keep these in the repo (`docs/game-history.md`) and read them before every run:
 
 - Every game's family, dimension values, visual style and prompt themes.
 - Every game's play-test findings: what worked, and which principle each problem broke.

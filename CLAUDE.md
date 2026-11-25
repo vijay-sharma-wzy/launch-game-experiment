@@ -7,9 +7,9 @@
 
 ## Purpose
 
-A fully client-side demo of **human verification games that also rank users** for the queue of a hype-release, first-come-first-served (FCFS) web app. The site's front page lists six games to compare; each is a candidate for the real release.
+A fully client-side demo of a **human verification game that also ranks users** for the queue of a hype-release, first-come-first-served (FCFS) web app.
 
-New games follow the framework in `docs/game-generator-spec-v3.md` (design spec, rubric, history, telemetry, scorer). Read it before designing or changing a game.
+Designing a new or different game? Follow `docs/game-generator-spec-v3.md`, and read `docs/game-history.md` first: it records five earlier experimental games (removed; in git history) and why play tests found they couldn't rank players.
 
 The game will eventually run on AWS (servers, databases, etc.). Until then, this repo **simulates that AWS infra on the client side**. There are no real backends, APIs or third-party services here.
 
@@ -47,47 +47,31 @@ This repo is only about what **the game itself** can do to filter bots and rank 
 
 Logic that will later run on the server (issuing sessions, timing rounds on the server's clock, validating and storing scores) should live in clearly separated client-side code that mimics a server, so it can be lifted into Lambda later. Do not trust or depend on it as real security; it is a stand-in.
 
-Current state:
+Current state: no server simulation exists yet. The score is just the local time from the Start tap to the last lock, plus wrong-pick penalties (`elapsed()` and `lock()` in `main.js`).
 
-- **Games 2–6** run their rules in a simulated server: `shared/server/game-server.js` wraps each game's `logic.js` and owns the clock, penalties, rounds and the telemetry of spec §6, then scores the session with `shared/server/scorer.js`. The client (`shared/shell.js`, `shared/render.js`) only forwards pointer input and draws the display-only frames it gets back, through `shared/transport.js`, which passes every message as JSON as a network would. Anything under `shared/server/` or in a game's `logic.js` is server code: the client must never import it except to create the server, and frames must never carry object names, answers or roles.
-- **Game 1** (Constellations) predates this and still runs its rules in `games/constellations/main.js`, timing the score locally.
-- Because it all runs in the browser, the answers ship in the bundle: the spec's leak audit (R14) fails by construction until the server code moves to AWS.
-- The bot-risk score shown on the DONE screen is a demo readout with guessed thresholds. It needs calibrating on real human and bot sessions before anything acts on it.
+## Game design
 
-## Games
+The player floats in space with Earth directly below. Constellations (outlines of objects) are scattered all the way round the player and overhead, never below, and each one slowly spins in place. The player drags the sky freely anywhere in the dome, up to straight overhead. A ring marks the centre of the screen. A game is 3 rounds, and in each round thinking and moving happen together rather than in separate steps:
 
-| # | Game | Folder | Family | Design |
-|---|---|---|---|---|
-| 1 | Constellations | `games/constellations/` | Search & identify, then align & hold | `games/constellations/DESIGN.md` |
-| 2 | Ink Trail | `games/ink-trail/` | Trace & connect | `games/ink-trail/DESIGN.md` |
-| 3 | Orbit Sort | `games/orbit-sort/` | Sort & group | `games/orbit-sort/DESIGN.md` |
-| 4 | Odd Lens | `games/odd-lens/` | Odd one out | `games/odd-lens/DESIGN.md` |
-| 5 | Night Window | `games/night-window/` | Timing & rhythm | `games/night-window/DESIGN.md` |
-| 6 | Toss & Catch | `games/toss-catch/` | Spatial reasoning | `games/toss-catch/DESIGN.md` |
+1. **Find.** A random prompt ("Find the object that melts in the sun") appears and the player can drag the sky straight away. Exactly one constellation answers the prompt. The outlines carry no name labels, in the page or the markup: recognising them is part of the task.
+2. **Hold.** Holding the ring on a constellation fills it. A full ring on a wrong constellation flashes red, dims that constellation and adds a 5-second penalty to the score, shown as "+5s" beside the timer (which always includes penalties). The DONE screen says how much of the score was penalties. A full ring on the right one fades the object in at the centre of the screen, turned away from its constellation.
+3. **Lock.** The player rotates the object with the dial to match the constellation, which keeps spinning. A small dot on the object's centre and a bigger one on the constellation's (shown only once it's found) guide the position. While position and rotation are both within a tight tolerance the ring fills and a soft glow eases in; when either slips it pauses, but never drains, so matched time adds up. There is deliberately no colour switch for "fitted", which a bot could read from one pixel. A full ring locks the round. The hold means the player has to track the spin with the dial: waiting for the constellation to come round to the object only adds a moment per turn.
 
-Each game's `DESIGN.md` is the source of truth for how it plays; keep it updated with the game. `games/HISTORY.md` records every game's family and dimension combination, play-test findings and the attacker coverage record (spec §4, §12): add a row for every new game, and never reuse a combination.
+The score is the total time. Rules that keep it fair:
 
-**The goal is ranking, not pass/fail.** A game must spread players' finish times out by skill (searching, reasoning, steering), so the FCFS queue can be ordered, while being costly to bot and making bots play visibly unlike people (spec v3 goals and R0). Play tests found games 2–6 don't rank players well (each broke a rule now in spec v3 §13); they were built to the earlier v2 spec and are candidates for redesign or replacement. Constellations is the example that works: one specific answer per round, found by looking around, with a full reset between rounds.
+- Prompts, objects, positions and rotations are randomised per player, but the **amount** of work is fixed: every round the answer is the same angular distance from where the player is looking, and every player gets the same set of rotation amounts in a random order and direction. Constellations spin at different speeds, half clockwise and half anticlockwise. The answer's speed comes from a fixed set (one per round, shuffled per player), and it always spins away from the match, so the spin never shortens one player's rotation and lengthens another's.
+- Objects that are arguable for a prompt (`maybe` in `PROMPTS`) are never in the sky with it.
+- The field of view is fixed along the screen's longer side, so phones and desktops see the same amount of sky.
 
-Rules shared by games 2–6:
-
-- 3 rounds; score is time plus 15 s per wrong commit (spec R3), shown in the HUD with a "+15s" flash and broken down on the DONE screen.
-- Prompts come from the categories and sizes in `shared/server/semantics.js`. Objects that are `maybe` for a category are never on screen while that category is asked about.
-- Progress always pauses rather than resets when the player slips (spec P4), and "fitted" or "right" is never shown by a colour switch alone (spec P5).
-- Layouts adapt to tall phone screens as well as desktops.
+Visual noise makes a screen-reading bot's job harder without changing what a human sees: every outline is drawn in slightly varying blues whose brightness and thickness waver over time, corners wobble by a pixel or two, each line between a constellation's stars fades out and back on its own timing (so a few are always missing, never the same ones for long), every star twinkles and, on its own timing, flares up, dims out completely and comes back, growing as it brightens and shrinking to nothing as it dims, and a nebula and Milky Way band in similar blues sit behind everything, drifting round the sky in two opposing layers with waves of brightness rolling through them, so the background is never still. Dark dust wisps drift just in front of the constellations, dimming patches of their lines by up to 75% (never fully) as they pass, so an angle measured from the screen keeps shifting; the held object and centre dots are drawn above them.
 
 ## Stack and layout
 
-- Vite + plain JavaScript (ES modules). No framework, no TypeScript. Game 1 uses three.js; games 2–6 draw with Canvas 2D.
-- `index.html`: the front page listing the six games.
-- `games/<name>/`: one folder per game, with its `index.html` and `DESIGN.md`. Game 1 has its rules in `main.js`; games 2–6 have theirs in `logic.js` (server code, tunables at the top), and their `index.html` only wires that logic into the shared shell.
-- `games/HISTORY.md`: the family and dimension combinations used, prompt themes, and the attacker coverage record.
-- `shared/objects.js`: the 32 hand-drawn object outlines all games draw from.
-- `shared/shell.js`, `shell.css`, `render.js`: the display-only client for games 2–6 (start screen, HUD, DONE screen with the bot-risk readout, input forwarding, drawing).
-- `shared/transport.js`: the JSON boundary between client and simulated server.
-- `shared/server/`: simulated server code: `game-server.js` (clock, penalties, rounds, telemetry), `scorer.js` (features and risk score), `semantics.js` (categories and sizes), `palette.js`, `random.js`.
-- `docs/game-generator-spec-v3.md`: the framework every new game follows.
-- `vite.config.js`: builds every page (list new games in `GAMES`) and sets `base: "./"` so the build works from any host or sub-path.
+- Vite + plain JavaScript (ES modules) + three.js. No framework, no TypeScript.
+- `index.html` contains the markup, styles and overlays (the HUD, the prompt, the ring, the rotation dial, the Start page and the DONE screen).
+- `main.js` contains all game logic: tunables at the top, then objects and prompts, the scene (stars, Earth, constellations), game state, rounds, controls, the lock check, and the game loop.
+- `vite.config.js` sets `base: "./"` so the build works from any host or sub-path.
+- `docs/game-generator-spec-v3.md`: the framework for designing games; `docs/game-history.md`: earlier games and play-test findings.
 
 ## Commands
 
@@ -111,4 +95,4 @@ Netlify, configured in `netlify.toml`. Each branch deploys to its own URL:
 
 ## Code style
 
-Match the existing code: no semicolons, single quotes in JS, two-space indent, and plain DOM APIs. Comments explain the *why* behind game and anti-bot decisions. Keep tunable numbers as named constants in the `Tunables` block at the top of each game's `main.js` or `logic.js`.
+Match the existing code: no semicolons, single quotes in JS, two-space indent, and plain DOM APIs. Comments explain the *why* behind game and anti-bot decisions. Keep tunable numbers as named constants in the `Tunables` block at the top of `main.js`.
