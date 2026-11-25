@@ -6,7 +6,7 @@ The games decide each player's place in the queue for a limited release (shoes, 
 
 "Unbottable" can't be guaranteed: anything a person can play through a screen and a pointer, a bot can in principle play the same way. Your goals, in priority order, are:
 
-1. **People finish.** Most people complete the game comfortably.
+1. **People finish.** Most people complete the game comfortably, and understand it at first sight: someone who has never seen the game can read the instructions and start playing straight away, without confusion.
 2. **Scores spread people out.** Finish times form a wide, continuous distribution driven by skill (how quickly someone searches, reasons and steers), so players can be ranked. A game where most careful players get the same score, or where the only difference between players is reaction speed, has failed, however hard it is to bot.
 3. **Bots are detectable.** A bot that completes the game produces input behaviour a scorer can tell apart from a person's, even when the bot deliberately plays at human speed.
 4. **Bots are expensive.** Solving a game costs an attacker more (in build time and model spend) than a solve is worth.
@@ -138,9 +138,11 @@ Detection is the durable defence. Design every game so that it produces good dat
 - **MUST:** every answer is visible and recognisable to a person within the time limit.
 - **MUST:** people using assistive or unusual pointing devices (trackballs, eye trackers, switch access, tremor) must be able to finish, and the scorer must not flag them as bots because of how they move. Where the scorer is unsure, the platform needs a non-game fallback.
 
-### P10: Intuitive controls
-Bot resistance must come from meaning and motion, never from controls that confuse people.
+### P10: Intuitive at first sight
+Bot resistance must come from meaning and motion, never from a game or controls that confuse people.
 
+- **MUST:** a person seeing the game for the first time, after reading the instructions, knows what they're trying to do and how to start, and makes their first meaningful move within about 10 seconds of pressing Start, without trial-and-error confusion. Nothing about how to play the game should need a tutorial, a demo or a failed first round to work out.
+- **MUST:** what the player sees on screen matches what the instructions said: the prompt, the thing to find and the way to act on it are obvious from the first frame. Unstated behaviours (P3) are refinements a player discovers while already playing, never prerequisites for starting.
 - **MUST:** each gesture does **one** job. Never make the same gesture both explore and commit, or both steer and draw. *(play test: in Ink Trail the line you drew to link objects was also how you panned the view, which was confusing.)*
 - **MUST:** control sensitivity is tuned with people, not set by formula. A person should land on a target comfortably on the first try; if they overshoot repeatedly, the gain is too high. *(play test: Odd Lens's drag-to-set-speed lens was far too sensitive.)*
 - **MUST:** every target is **reachable** with comfortable effort, from wherever it appears, for its whole lifetime. Don't spawn things where they can't be reached in time, and don't let them swerve out of reach at the last moment. If the game uses physics, it must look and feel believable. *(play test: Toss & Catch threw some objects low enough that they couldn't be caught, and late swerves left the net no time to follow.)*
@@ -227,8 +229,9 @@ Twelve families are still too few to stay novel. Each game also picks one value 
 | R22 | Measured time spread meets the §9 targets, driven by search, reasoning and steering | MUST = 2 |
 | R23 | Controls: one job per gesture, tuned sensitivity, every target comfortably reachable | MUST = 2 |
 | R24 | Equal work: randomness changes what players see, not how much they must do | MUST = 2 |
+| R25 | Intuitive at first sight: first-time players understand the goal and start playing within ~10 s of reading the instructions (§9) | MUST = 2 |
 
-**Pass:** every MUST item is satisfied, and the total is 43/48 or more.
+**Pass:** every MUST item is satisfied, and the total is 45/50 or more.
 
 ---
 
@@ -305,6 +308,7 @@ time_budget:   # R0: where a typical player's seconds go
   ceiling: <why careful players don't all converge on one time>
   equal_work: <how every player gets the same amount of work>
 controls:   # P10
+  first_play: <what a first-time player does in their first 10 seconds, and why it's obvious from the instructions and the first frame>
   gestures: <each gesture and its one job>
   sensitivity: <values, and how they were tuned>
   reachability: <why every target can be reached comfortably>
@@ -372,6 +376,7 @@ A person solving the game by hand on behalf of a buyer is not a bot, and no game
 ### Completion and comfort
 - **Target:** at least 95% completion, a median time within 30–120 s, a mean difficulty rating of 3 or lower out of 5, and an abandonment rate of 5% or lower.
 - **Before real players are available:** use a "naive player" model pass. It gets only the start screen and the rendered game, and must describe how to play, discover every unstated behaviour, and identify every answer. Flag anything it reports as unclear or counter-intuitive.
+- **First-play clarity:** with first-time players who read only the start screen, at least 90% make their first meaningful move (toward the goal, not random exploring) within 10 seconds of pressing Start, and can say what the goal was afterwards. Before real players are available, the naive-player pass must also report what it would do first and whether anything about starting was unclear (P10).
 - **Controls:** play testers land on targets without repeated overshoot, never meet a target they couldn't reach, and never notice a probe (P4, P10).
 
 ### Time distribution (ranking quality)
@@ -452,6 +457,7 @@ What worked well (Constellations): one specific answer per round, found by looki
 - "Any item that fits" tasks, where a player can act on whichever valid item they see first.
 - Game-paced tasks (belts, waves, fixed tempos) where every careful player gets the same time.
 - A rule or item set that persists across several commits, so players settle into a routine.
+- A game a first-time player can't start playing straight away after reading the instructions, or that needs a tutorial or a failed first round to understand.
 - A gesture that does two jobs, or control gain that makes people overshoot.
 - Targets that can be out of reach, or physics that doesn't look believable.
 - A continuous phase with constant, perfectly predictable motion and no probes.
